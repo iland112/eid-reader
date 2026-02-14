@@ -1,0 +1,26 @@
+{
+  "name": "eID Reader Dev",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "forwardPorts": [5037, 8081],
+  "mounts": [
+    "source=eid-reader-gradle-cache,target=/home/flutter/.gradle,type=volume",
+    "source=eid-reader-pub-cache,target=/home/flutter/.pub-cache,type=volume"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Dart-Code.dart-code",
+        "Dart-Code.flutter",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "dart.flutterSdkPath": "/home/flutter/sdks/flutter"
+      }
+    }
+  },
+  "postCreateCommand": "flutter pub get && flutter doctor -v",
+  "remoteUser": "flutter"
+}

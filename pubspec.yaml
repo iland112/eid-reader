@@ -1,0 +1,48 @@
+name: eid_reader
+description: Multi-platform eID Reader - e-Passport reading via NFC
+version: 1.0.0+1
+publish_to: 'none'
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # Navigation
+  go_router: ^14.6.2
+
+  # NFC & Passport Reading (ICAO 9303)
+  dmrtd:
+    git:
+      url: https://github.com/ZeroPass/dmrtd.git
+      ref: master
+
+  # Permissions
+  permission_handler: ^11.3.1
+
+  # UI
+  cupertino_icons: ^1.0.8
+
+  # Utilities
+  equatable: ^2.0.7
+  intl: ^0.19.0
+  logging: ^1.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  riverpod_generator: ^2.6.3
+  build_runner: ^2.4.13
+  mockito: ^5.4.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/

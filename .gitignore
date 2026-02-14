@@ -1,0 +1,52 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub/
+pubspec.lock
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Linux
+linux/flutter/ephemeral/
+
+# Windows
+windows/flutter/ephemeral/
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+*.iml
+*.ipr
+*.iws
+
+# Environment & Secrets
+.env
+.env.*
+*.p12
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+
+# Generated code
+*.g.dart
+*.freezed.dart
+*.mocks.dart
