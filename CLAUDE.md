@@ -125,11 +125,11 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - Never expose raw exception messages to users.
 
 ### Testing
-- Unit tests: `test/` directory, mirroring `lib/` structure. **71 tests across 7 files.**
+- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **104 tests across 10 files.**
 - **Manual mock pattern** (no mockito codegen due to analyzer 7.x incompatibility).
 - Use Riverpod `ProviderContainer` overrides for dependency injection in tests.
 - For `MethodChannel` testing, use `TestDefaultBinaryMessengerBinding`.
-- Widget tests for all screens using `flutter_test` (not yet implemented).
+- Widget tests for all 3 screens (MrzInput, NfcScan, PassportDetail) with GoRouter + mock providers.
 - Real device + passport needed for integration testing.
 - See `docs/testing.md` for full test inventory and guide.
 

@@ -2,8 +2,8 @@
 
 ## Overview
 
-- **Total tests**: 71
-- **Test files**: 7
+- **Total tests**: 104
+- **Test files**: 10 (7 unit + 3 widget)
 - **Framework**: `flutter_test`
 - **Mock strategy**: Manual mocks (no mockito codegen)
 - **CI command**: `flutter test`
@@ -104,6 +104,66 @@ Tests `SecureScreenServiceImpl` via MethodChannel mock.
 | PassportReaderNotifier | Initial state, reset |
 | With mock datasource | Success flow, TagLost error, auth failure, timeout, generic error, reset after read |
 
+### Widget: MRZ Input Screen
+
+#### `test/features/mrz_input/presentation/screens/mrz_input_screen_test.dart` (8 tests)
+
+| Test | Description |
+|---|---|
+| App bar title | Renders 'eID Reader' |
+| Headline text | Renders 'Enter Passport MRZ Data' |
+| Three text fields | Document Number, Date of Birth, Date of Expiry |
+| Read Passport button | Button with NFC icon |
+| Validation errors | Shows required field errors on empty submit |
+| Date format error | Shows 'Format: YYMMDD' for partial input |
+| Navigation | Navigates to `/nfc-scan` with valid MrzData |
+| Field hints | Renders hint texts (e.g. 'e.g. M12345678') |
+
+### Widget: NFC Scan Screen
+
+#### `test/features/passport_reader/presentation/screens/nfc_scan_screen_test.dart` (11 tests)
+
+Uses GoRouter for named route navigation and `Completer`-based mock for
+blocking "in progress" state tests.
+
+| Test | Description |
+|---|---|
+| App bar title | Renders 'Reading Passport' |
+| NFC icon | Shows NFC icon during reading |
+| Progress indicator | Shows `LinearProgressIndicator` during reading |
+| TagLost error | Error icon + 'Connection lost...' message |
+| Try Again button | Shows retry button on error |
+| No progress on error | Hides progress indicator on error |
+| Auth error | 'Authentication failed...' message |
+| Timeout error | 'Reading timed out...' message |
+| Generic error | 'Could not read passport...' message |
+| Success navigation | Navigates to `/passport-detail` on success |
+| Retry + navigation | Try Again -> success -> navigates |
+
+### Widget: Passport Detail Screen
+
+#### `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` (14 tests)
+
+Uses `MockSecureScreenService` to verify FLAG_SECURE calls and
+`Navigator.pushReplacement` to test dispose behavior.
+
+| Test | Description |
+|---|---|
+| App bar title | Renders 'Passport Details' |
+| Personal info | Name, nationality, DOB, sex |
+| Document info | Document number, issuing state, expiry, type |
+| Security status | Passive/active auth, protocol |
+| Pending badge | Orange 'Verification Pending' when not verified |
+| Verified badge | Green 'Document Verified' when verified |
+| Verified data | Shows PACE, 'Verified' for both auth types |
+| Person icon | Fallback icon when no face image |
+| Failed auth | Shows 'Failed' for `activeAuthValid: false` |
+| Secure mode on | Calls `enableSecureMode()` on init |
+| Dispose cleanup | Calls `disableSecureMode()` + zeroes face buffer |
+| Section headers | All 3 section headers render |
+| Field labels | All 11 field labels render |
+| All fields | Renders all passport data values |
+
 ## Running Tests
 
 ```bash
@@ -126,5 +186,19 @@ flutter test --reporter expanded
 2. Use manual mocks (implement the abstract interface directly)
 3. For providers, use `ProviderContainer` for DI
 4. For MethodChannel, use `TestDefaultBinaryMessengerBinding`
-5. Run `flutter test` to verify all pass
-6. Run `flutter analyze` to check for lint issues
+5. For widget tests with Riverpod, wrap in `ProviderScope` with overrides
+6. For GoRouter navigation tests, use `MaterialApp.router` with `GoRouter`
+7. For dispose testing, use `Navigator.pushReplacement` within same `ProviderScope`
+8. Run `flutter test` to verify all pass
+9. Run `flutter analyze` to check for lint issues
+
+## Known Issues
+
+- **Riverpod `ref` in `dispose()`**: Cannot use `ref.read()` in `dispose()` of
+  `ConsumerStatefulWidget` (throws `Bad state: Cannot use "ref" after disposed`).
+  Fix: cache the notifier in `initState` and use `Future.microtask` with
+  `mounted` check in `dispose()`.
+- **Riverpod provider modification during tree building**: Cannot call
+  `notifier.setState()` during `dispose()`/`unmount` (throws
+  `Tried to modify a provider while the widget tree was building`).
+  Fix: schedule via `Future.microtask`.

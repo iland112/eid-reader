@@ -44,10 +44,11 @@ This document tracks what has been implemented and what remains.
 - Added `_formatYYMMDD()` and `_parseYYMMDD()` helper functions
 - PACE-first authentication with BAC fallback
 
-### Test Suite (v0.2)
+### Test Suite (v0.2 + v0.3)
 
-- 71 unit tests across 7 test files
+- 104 tests across 10 test files (71 unit + 33 widget)
 - Manual mock pattern (no mockito codegen due to analyzer incompatibility)
+- Widget tests for all 3 screens (MrzInput, NfcScan, PassportDetail)
 - See [testing.md](testing.md) for details
 
 ### Infrastructure (v0.2)
@@ -63,7 +64,7 @@ This document tracks what has been implemented and what remains.
 | MRZ Camera Scan | Medium | OCR-based MRZ auto-recognition via camera |
 | Passive Authentication | Medium | EfSOD signature verification (dmrtd `EfSOD` is currently a stub) |
 | Active Authentication | Low | AA protocol (many passports don't support it) |
-| Widget Tests | Medium | Screen-level widget tests with `flutter_test` |
+| ~~Widget Tests~~ | ~~Medium~~ | DONE (v0.3) — 33 widget tests across 3 screens |
 | `@riverpod` Code Generation | Low | Migrate manual `StateNotifier` to `@riverpod` annotations |
 | DG2 JPEG2000 Decoding | Low | Some passports use JP2 format; needs platform channel fallback |
 | Desktop Support (Windows/Linux) | Low | `PcscProvider`-based USB smart card reader integration |
@@ -75,3 +76,4 @@ This document tracks what has been implemented and what remains.
 | `bd2439b` | chore | Initial project setup with Flutter architecture |
 | `b733afc` | docs | Add CLAUDE.md with project guide |
 | `e8b1be9` | feat | Security hardening, DI refactoring, 71 unit tests |
+| `0f8f216` | docs | Project documentation and CLAUDE.md update |

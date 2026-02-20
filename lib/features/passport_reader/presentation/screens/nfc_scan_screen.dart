@@ -15,19 +15,28 @@ class NfcScanScreen extends ConsumerStatefulWidget {
 }
 
 class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
+  PassportReaderNotifier? _notifier;
+
   @override
   void initState() {
     super.initState();
     // Start reading when screen opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(passportReaderProvider.notifier).readPassport(widget.mrzData);
+      _notifier = ref.read(passportReaderProvider.notifier);
+      _notifier!.readPassport(widget.mrzData);
     });
   }
 
   @override
   void dispose() {
-    // Reset state when leaving
-    ref.read(passportReaderProvider.notifier).reset();
+    // Schedule reset after the current frame to avoid modifying provider
+    // state during widget tree teardown (Riverpod restriction).
+    final notifier = _notifier;
+    if (notifier != null) {
+      Future.microtask(() {
+        if (notifier.mounted) notifier.reset();
+      });
+    }
     super.dispose();
   }
 
