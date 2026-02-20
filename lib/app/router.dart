@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/mrz_input/domain/entities/mrz_data.dart';
+import '../features/mrz_input/presentation/screens/mrz_camera_screen.dart';
 import '../features/mrz_input/presentation/screens/mrz_input_screen.dart';
 import '../features/passport_reader/domain/entities/passport_data.dart';
 import '../features/passport_reader/presentation/screens/nfc_scan_screen.dart';
@@ -16,6 +17,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/mrz-input',
         name: 'mrz-input',
         builder: (context, state) => const MrzInputScreen(),
+      ),
+      GoRoute(
+        path: '/mrz-camera',
+        name: 'mrz-camera',
+        builder: (context, state) => const MrzCameraScreen(),
       ),
       GoRoute(
         path: '/nfc-scan',

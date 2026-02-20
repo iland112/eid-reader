@@ -2,8 +2,8 @@
 
 ## Overview
 
-- **Total tests**: 104
-- **Test files**: 10 (7 unit + 3 widget)
+- **Total tests**: 139
+- **Test files**: 14 (10 unit + 4 widget)
 - **Framework**: `flutter_test`
 - **Mock strategy**: Manual mocks (no mockito codegen)
 - **CI command**: `flutter test`
@@ -64,6 +64,29 @@ Tests `SecureScreenServiceImpl` via MethodChannel mock.
 | Full MRZ validation | Valid complete input, each field invalid individually |
 | Edge cases | Boundary dates (010101, 991231), filler chars in doc number |
 
+#### `test/features/mrz_input/domain/usecases/parse_mrz_from_text_test.dart` (16 tests)
+
+Tests ICAO 9303 TD3 MRZ parsing from raw OCR text.
+
+| Test | Description |
+|---|---|
+| Valid TD3 MRZ | Parses 2-line MRZ and extracts correct fields |
+| OCR noise | Finds MRZ lines among random surrounding text |
+| Empty text | Returns null |
+| Single line | Returns null (needs 2 consecutive lines) |
+| Non-MRZ text | Returns null |
+| Bad doc check digit | Returns null on incorrect check digit |
+| Bad DOB check digit | Returns null on incorrect check digit |
+| Bad DOE check digit | Returns null on incorrect check digit |
+| Trailing fillers | Trims `<` from document number |
+| No fillers | Preserves full document number |
+| Guillemet `«` | Handles `«` as `<` (OCR variant) |
+| Blank lines | Collapses blank lines between MRZ (OCR artifact) |
+| Non-first position | Finds MRZ lines not at start of text |
+| Non-digit check | Returns null for letter in check digit position |
+| Line 1 bad prefix | Returns null when line 1 doesn't start with P |
+| Short lines | Returns null for lines < 44 characters |
+
 #### `test/features/mrz_input/presentation/providers/mrz_input_provider_test.dart` (11 tests)
 
 | Test | Description |
@@ -79,6 +102,23 @@ Tests `SecureScreenServiceImpl` via MethodChannel mock.
 | Partial input | Invalid until all fields present |
 | Provider type | Correct provider type check |
 | Multiple updates | Sequential updates work correctly |
+
+#### `test/features/mrz_input/presentation/providers/mrz_camera_provider_test.dart` (10 tests)
+
+Tests MRZ camera scanning state management with mock `TextRecognitionService`.
+
+| Test | Description |
+|---|---|
+| Default state | isProcessing=false, detectedMrz=null, errorMessage=null |
+| copyWith | Preserves unchanged fields |
+| Initial state | Notifier starts with default state |
+| processText valid | Detects MRZ and updates detectedMrz |
+| processText invalid | Does not update state for non-MRZ text |
+| reset | Clears detected MRZ and resets state |
+| Provider type | Correct provider type with override |
+| processImage detects | ML Kit OCR → MRZ detection pipeline |
+| processImage no MRZ | Returns empty state when no MRZ found |
+| processImage skip | Skips processing when already detected |
 
 ### Feature: Passport Reader
 
@@ -106,7 +146,7 @@ Tests `SecureScreenServiceImpl` via MethodChannel mock.
 
 ### Widget: MRZ Input Screen
 
-#### `test/features/mrz_input/presentation/screens/mrz_input_screen_test.dart` (8 tests)
+#### `test/features/mrz_input/presentation/screens/mrz_input_screen_test.dart` (10 tests)
 
 | Test | Description |
 |---|---|
@@ -117,7 +157,26 @@ Tests `SecureScreenServiceImpl` via MethodChannel mock.
 | Validation errors | Shows required field errors on empty submit |
 | Date format error | Shows 'Format: YYMMDD' for partial input |
 | Navigation | Navigates to `/nfc-scan` with valid MrzData |
+| Scan MRZ button | Renders 'Scan MRZ' button with camera icon |
+| Camera navigation | Navigates to `/mrz-camera` on Scan MRZ tap |
 | Field hints | Renders hint texts (e.g. 'e.g. M12345678') |
+
+### Widget: MRZ Camera Screen
+
+#### `test/features/mrz_input/presentation/screens/mrz_camera_screen_test.dart` (7 tests)
+
+Tests the MRZ camera scanning UI states using `MrzCameraNotifier` with mock
+`TextRecognitionService`. Uses extracted bottom panel widget for hardware-free testing.
+
+| Test | Description |
+|---|---|
+| Scanning instruction | Shows positioning instruction text |
+| No progress idle | No progress indicator in idle state |
+| MRZ Detected panel | Shows 'MRZ Detected' with check icon |
+| Detected data | Shows document number, DOB, DOE values |
+| Action buttons | Shows 'Use This Data' and 'Rescan' buttons |
+| Rescan button | Clears detected MRZ, returns to scanning view |
+| No buttons idle | Hides action buttons when no MRZ detected |
 
 ### Widget: NFC Scan Screen
 

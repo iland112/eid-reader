@@ -24,6 +24,10 @@ dependencies:
       ref: master
   flutter_nfc_kit: ^3.6.2
 
+  # Camera + OCR
+  camera: ^0.11.0+2
+  google_mlkit_text_recognition: ^0.14.0
+
   # Permissions
   permission_handler: ^11.3.1
 

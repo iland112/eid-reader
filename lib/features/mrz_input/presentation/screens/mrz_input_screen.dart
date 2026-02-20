@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../domain/entities/mrz_data.dart';
 import '../../domain/usecases/validate_mrz.dart';
 import '../providers/mrz_input_provider.dart';
 
@@ -26,6 +27,16 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
     _dobController.dispose();
     _doeController.dispose();
     super.dispose();
+  }
+
+  Future<void> _onScanMrz() async {
+    final result = await context.pushNamed<MrzData>('mrz-camera');
+    if (result != null && mounted) {
+      ref.read(mrzInputProvider.notifier).setFromMrz(result);
+      _docNumberController.text = result.documentNumber;
+      _dobController.text = result.dateOfBirth;
+      _doeController.text = result.dateOfExpiry;
+    }
   }
 
   void _onReadPassport() {
@@ -119,7 +130,13 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
                 onChanged: (value) =>
                     ref.read(mrzInputProvider.notifier).updateDateOfExpiry(value),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: _onScanMrz,
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Scan MRZ'),
+              ),
+              const SizedBox(height: 12),
               ElevatedButton.icon(
                 onPressed: _onReadPassport,
                 icon: const Icon(Icons.nfc),

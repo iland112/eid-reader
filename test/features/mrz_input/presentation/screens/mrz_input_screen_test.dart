@@ -20,6 +20,12 @@ Widget _buildTestApp({
             builder: (context, state) => const MrzInputScreen(),
           ),
           GoRoute(
+            path: '/mrz-camera',
+            name: 'mrz-camera',
+            builder: (context, state) =>
+                const Scaffold(body: Text('MRZ Camera')),
+          ),
+          GoRoute(
             path: '/nfc-scan',
             name: 'nfc-scan',
             builder: (context, state) =>
@@ -131,6 +137,24 @@ void main() {
 
       // Should navigate to NFC Scan screen
       expect(find.text('NFC Scan'), findsOneWidget);
+    });
+
+    testWidgets('renders Scan MRZ button', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Scan MRZ'), findsOneWidget);
+      expect(find.byIcon(Icons.camera_alt), findsOneWidget);
+    });
+
+    testWidgets('Scan MRZ button navigates to mrz-camera', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Scan MRZ'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('MRZ Camera'), findsOneWidget);
     });
 
     testWidgets('renders credit card icon', (tester) async {

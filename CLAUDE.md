@@ -53,7 +53,7 @@ MRZ Input ──→ NFC Scan ──→ Passport Detail
 MRZ Camera Scan
 ```
 
-Routes: `/mrz-input` → `/nfc-scan` → `/passport-detail`
+Routes: `/mrz-input` → `/mrz-camera` (optional) → `/nfc-scan` → `/passport-detail`
 
 ### Multi-Platform Abstraction
 
@@ -71,6 +71,8 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 | Navigation | `go_router` | Declarative, URL-based routing |
 | Passport Reading | `dmrtd` (git dep: ZeroPass/dmrtd) | ICAO 9303, BAC+PACE, DG1/DG2 |
 | NFC | `flutter_nfc_kit` | Direct dependency (also transitive via dmrtd) |
+| Camera | `camera` | Camera preview and image stream |
+| OCR | `google_mlkit_text_recognition` | ML Kit text recognition for MRZ scanning |
 | Permissions | `permission_handler` | Camera, NFC permissions |
 | Equality | `equatable` | Value equality for entities |
 | Logging | `logging` | Structured logging |
@@ -125,11 +127,11 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - Never expose raw exception messages to users.
 
 ### Testing
-- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **104 tests across 10 files.**
+- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **139 tests across 14 files.**
 - **Manual mock pattern** (no mockito codegen due to analyzer 7.x incompatibility).
 - Use Riverpod `ProviderContainer` overrides for dependency injection in tests.
 - For `MethodChannel` testing, use `TestDefaultBinaryMessengerBinding`.
-- Widget tests for all 3 screens (MrzInput, NfcScan, PassportDetail) with GoRouter + mock providers.
+- Widget tests for all 4 screens (MrzInput, MrzCamera, NfcScan, PassportDetail) with GoRouter + mock providers.
 - Real device + passport needed for integration testing.
 - See `docs/testing.md` for full test inventory and guide.
 
@@ -158,6 +160,9 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `lib/features/passport_reader/presentation/providers/passport_reader_provider.dart` - Notifier with DI support
 - `lib/features/passport_display/presentation/screens/passport_detail_screen.dart` - Secure display with buffer clearing
 - `lib/features/mrz_input/domain/usecases/validate_mrz.dart` - ICAO 9303 MRZ validation
+- `lib/features/mrz_input/domain/usecases/parse_mrz_from_text.dart` - MRZ OCR text parser (TD3 format)
+- `lib/features/mrz_input/presentation/screens/mrz_camera_screen.dart` - Camera-based MRZ scanning screen
+- `lib/features/mrz_input/presentation/providers/mrz_camera_provider.dart` - Camera scan state management
 - `android/app/src/main/kotlin/com/smartcoreinc/eid_reader/MainActivity.kt` - Native FLAG_SECURE handler
 - `.devcontainer/Dockerfile` - Development environment
 - `pubspec.yaml` - Dependencies (note: dmrtd is a git dependency)

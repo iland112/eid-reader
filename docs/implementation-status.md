@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-02-20
+Last updated: 2026-02-21
 
 ## Overview
 
@@ -44,11 +44,22 @@ This document tracks what has been implemented and what remains.
 - Added `_formatYYMMDD()` and `_parseYYMMDD()` helper functions
 - PACE-first authentication with BAC fallback
 
-### Test Suite (v0.2 + v0.3)
+### MRZ Camera Scan (v0.4)
 
-- 104 tests across 10 test files (71 unit + 33 widget)
+- Camera-based MRZ OCR scanning using `google_mlkit_text_recognition` + `camera`
+- `ParseMrzFromText` use case: ICAO 9303 TD3 MRZ detection and parsing from OCR text
+  - Consecutive line detection, check digit validation, filler character handling
+  - Reuses existing `MrzUtils.calculateCheckDigit()` for validation
+- `MrzCameraNotifier` state management with `TextRecognitionService` abstraction for DI
+- `MrzCameraScreen`: camera preview with MRZ overlay guide, detection panel, Rescan/Use This Data buttons
+- Navigation: MrzInputScreen → "Scan MRZ" button → `/mrz-camera` → pop(MrzData) → auto-fill fields
+- Android camera permission added to AndroidManifest.xml
+
+### Test Suite (v0.2 + v0.3 + v0.4)
+
+- 139 tests across 14 test files (97 unit + 42 widget)
 - Manual mock pattern (no mockito codegen due to analyzer incompatibility)
-- Widget tests for all 3 screens (MrzInput, NfcScan, PassportDetail)
+- Widget tests for all 4 screens (MrzInput, MrzCamera, NfcScan, PassportDetail)
 - See [testing.md](testing.md) for details
 
 ### Infrastructure (v0.2)
@@ -61,7 +72,7 @@ This document tracks what has been implemented and what remains.
 
 | Feature | Priority | Notes |
 |---|---|---|
-| MRZ Camera Scan | Medium | OCR-based MRZ auto-recognition via camera |
+| ~~MRZ Camera Scan~~ | ~~Medium~~ | DONE (v0.4) — google_mlkit_text_recognition + camera, TD3 parsing |
 | Passive Authentication | Medium | EfSOD signature verification (dmrtd `EfSOD` is currently a stub) |
 | Active Authentication | Low | AA protocol (many passports don't support it) |
 | ~~Widget Tests~~ | ~~Medium~~ | DONE (v0.3) — 33 widget tests across 3 screens |
