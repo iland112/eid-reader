@@ -13,7 +13,7 @@ All passport data stays in-memory only - never persisted to disk or transmitted 
 
 - **Project path**: `~/projects/flutter/eid_reader` (WSL2 Linux filesystem)
 - **Build environment**: Docker DevContainer (`.devcontainer/`)
-- **Base image**: `gmeligio/flutter-android:3.27`
+- **Base image**: `gmeligio/flutter-android:3.27.4`
 - **IDE**: VS Code with Dev Containers + Remote WSL extensions
 - **ADB**: TCP/IP mode (USB passthrough not available in WSL2/Docker)
   - Windows: `adb tcpip 5555`
@@ -70,7 +70,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 | State Management | `flutter_riverpod` + `riverpod_annotation` | With code generation (`riverpod_generator`) |
 | Navigation | `go_router` | Declarative, URL-based routing |
 | Passport Reading | `dmrtd` (git dep: ZeroPass/dmrtd) | ICAO 9303, BAC+PACE, DG1/DG2 |
-| NFC | `flutter_nfc_kit` | Transitive dependency via dmrtd |
+| NFC | `flutter_nfc_kit` | Direct dependency (also transitive via dmrtd) |
 | Permissions | `permission_handler` | Camera, NFC permissions |
 | Equality | `equatable` | Value equality for entities |
 | Logging | `logging` | Structured logging |
@@ -103,15 +103,20 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - **NO logging of PII** (names, document numbers, dates, biometric data).
 - **NO network transmission** of passport data (v1 is fully offline).
 - **NO secrets in Docker images** (keystores, signing keys).
-- Use `FLAG_SECURE` on Android for screens showing passport data.
-- Null out `Uint8List` buffers containing biometric data when navigating away.
+- **FLAG_SECURE** (IMPLEMENTED): `SecureScreenService` + `MainActivity.kt` MethodChannel on passport detail screen.
+- **Biometric buffer clearing** (IMPLEMENTED): `Uint8List.fillRange(0, length, 0)` in `PassportDetailScreen.dispose()`.
+- See `docs/security.md` for full security architecture details.
 
 ### NFC / Passport Reading
 - Always try PACE authentication first, fall back to BAC.
 - Handle `TagLostException` with auto-retry guidance.
 - Handle authentication failures by returning user to MRZ input.
 - DG2 face images may be JPEG2000; try standard JPEG decode first, then platform channel fallback.
-- The `dmrtd` API uses: `NfcProvider`, `Passport`, `DbaKey`, `EfDg1`, `EfDg2`, `EfCom`, `EfSod`.
+- The `dmrtd` API uses: `NfcProvider`, `Passport`, `DBAKey`, `EfDG1`, `EfDG2`, `EfCOM`, `EfSOD`.
+- `DBAKey` constructor takes `(String docNum, DateTime dateOfBirth, DateTime dateOfExpiry)`.
+- `EfDG2.imageData` for face image bytes; `MRP.documentCode` for document type.
+- `MRP.dateOfBirth` / `MRP.dateOfExpiry` return `DateTime`, not `String`.
+- See `docs/dmrtd-api-notes.md` for full API reference and common pitfalls.
 
 ### Error Handling
 - Custom exceptions in `core/error/exceptions.dart`.
@@ -120,11 +125,13 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - Never expose raw exception messages to users.
 
 ### Testing
-- Unit tests: `test/` directory, mirroring `lib/` structure.
-- Mock NFC/passport communication for unit tests.
+- Unit tests: `test/` directory, mirroring `lib/` structure. **71 tests across 7 files.**
+- **Manual mock pattern** (no mockito codegen due to analyzer 7.x incompatibility).
 - Use Riverpod `ProviderContainer` overrides for dependency injection in tests.
-- Widget tests for all screens using `flutter_test`.
+- For `MethodChannel` testing, use `TestDefaultBinaryMessengerBinding`.
+- Widget tests for all screens using `flutter_test` (not yet implemented).
 - Real device + passport needed for integration testing.
+- See `docs/testing.md` for full test inventory and guide.
 
 ### Git
 - **Branch**: `main`
@@ -145,10 +152,22 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `lib/app/router.dart` - GoRouter route definitions
 - `lib/app/theme.dart` - Material 3 theme configuration
 - `lib/core/platform/nfc_service.dart` - NFC abstraction interface
+- `lib/core/platform/secure_screen_service.dart` - FLAG_SECURE abstraction + MethodChannel impl
+- `lib/features/passport_reader/data/datasources/passport_datasource.dart` - Abstract datasource interface
 - `lib/features/passport_reader/data/datasources/nfc_passport_datasource.dart` - Core dmrtd integration
+- `lib/features/passport_reader/presentation/providers/passport_reader_provider.dart` - Notifier with DI support
+- `lib/features/passport_display/presentation/screens/passport_detail_screen.dart` - Secure display with buffer clearing
 - `lib/features/mrz_input/domain/usecases/validate_mrz.dart` - ICAO 9303 MRZ validation
+- `android/app/src/main/kotlin/com/smartcoreinc/eid_reader/MainActivity.kt` - Native FLAG_SECURE handler
 - `.devcontainer/Dockerfile` - Development environment
 - `pubspec.yaml` - Dependencies (note: dmrtd is a git dependency)
+
+## Documentation
+
+- `docs/implementation-status.md` - What is implemented and what remains
+- `docs/security.md` - Security architecture and measures
+- `docs/testing.md` - Test inventory and guide
+- `docs/dmrtd-api-notes.md` - dmrtd library API reference and pitfalls
 
 ## Commands
 
