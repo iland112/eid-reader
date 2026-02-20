@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../mrz_input/domain/entities/mrz_data.dart';
 import '../../data/datasources/nfc_passport_datasource.dart';
+import '../../data/datasources/passport_datasource.dart';
 import '../../domain/entities/passport_data.dart';
 
 /// Reading progress state.
@@ -40,9 +41,11 @@ class PassportReaderState {
 }
 
 class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
-  PassportReaderNotifier() : super(const PassportReaderState());
+  final PassportDatasource _datasource;
 
-  final _datasource = NfcPassportDatasource();
+  PassportReaderNotifier({PassportDatasource? datasource})
+      : _datasource = datasource ?? NfcPassportDatasource(),
+        super(const PassportReaderState());
 
   Future<void> readPassport(MrzData mrzData) async {
     state = const PassportReaderState(step: ReadingStep.connecting);

@@ -5,17 +5,37 @@ import 'package:logging/logging.dart';
 
 import '../../../mrz_input/domain/entities/mrz_data.dart';
 import '../../domain/entities/passport_data.dart';
+import 'passport_datasource.dart';
 
 final _log = Logger('NfcPassportDatasource');
 
+String _formatYYMMDD(DateTime date) {
+  final y = (date.year % 100).toString().padLeft(2, '0');
+  final m = date.month.toString().padLeft(2, '0');
+  final d = date.day.toString().padLeft(2, '0');
+  return '$y$m$d';
+}
+
+/// Parses YYMMDD string to DateTime.
+DateTime _parseYYMMDD(String yymmdd) {
+  final yy = int.parse(yymmdd.substring(0, 2));
+  final mm = int.parse(yymmdd.substring(2, 4));
+  final dd = int.parse(yymmdd.substring(4, 6));
+  // ICAO 9303: years 00-99 map to 2000-2099 for expiry, 1900-1999 for birth.
+  // For DBAKey, the library handles the century internally.
+  final year = yy < 70 ? 2000 + yy : 1900 + yy;
+  return DateTime(year, mm, dd);
+}
+
 /// Reads e-Passport data via NFC using the dmrtd library.
-class NfcPassportDatasource {
+class NfcPassportDatasource implements PassportDatasource {
   final NfcProvider _nfc = NfcProvider();
 
   /// Reads passport data using NFC.
   ///
   /// Attempts PACE first, falls back to BAC if not supported.
   /// Reads DG1 (MRZ biographical data) and DG2 (face image).
+  @override
   Future<PassportData> readPassport(MrzData mrzData) async {
     String authProtocol = 'BAC';
 
@@ -28,10 +48,10 @@ class NfcPassportDatasource {
       final passport = Passport(_nfc);
 
       // Try PACE first, fall back to BAC
-      final dbaKey = DbaKey(
+      final dbaKey = DBAKey(
         mrzData.documentNumber,
-        mrzData.dateOfBirth,
-        mrzData.dateOfExpiry,
+        _parseYYMMDD(mrzData.dateOfBirth),
+        _parseYYMMDD(mrzData.dateOfExpiry),
       );
 
       try {
@@ -50,7 +70,7 @@ class NfcPassportDatasource {
 
       // Read EF.COM
       _log.info('Reading EF.COM...');
-      final efCom = await passport.readEfCOM();
+      await passport.readEfCOM();
 
       // Read DG1 (MRZ data)
       _log.info('Reading DG1...');
@@ -61,7 +81,7 @@ class NfcPassportDatasource {
       Uint8List? faceImageBytes;
       try {
         final dg2 = await passport.readEfDG2();
-        faceImageBytes = dg2.faceData;
+        faceImageBytes = dg2.imageData;
       } catch (e) {
         _log.warning('Could not read DG2: $e');
       }
@@ -79,11 +99,11 @@ class NfcPassportDatasource {
         givenNames: mrz.firstName,
         documentNumber: mrz.documentNumber,
         nationality: mrz.nationality,
-        dateOfBirth: mrz.dateOfBirth,
+        dateOfBirth: _formatYYMMDD(mrz.dateOfBirth),
         sex: mrz.gender,
-        dateOfExpiry: mrz.dateOfExpiry,
+        dateOfExpiry: _formatYYMMDD(mrz.dateOfExpiry),
         issuingState: mrz.country,
-        documentType: mrz.documentType,
+        documentType: mrz.documentCode,
         faceImageBytes: faceImageBytes,
         authProtocol: authProtocol,
       );

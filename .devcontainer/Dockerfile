@@ -1,4 +1,4 @@
-FROM gmeligio/flutter-android:3.27
+FROM gmeligio/flutter-android:3.27.4
 
 # Accept Android SDK licenses
 RUN yes | flutter doctor --android-licenses 2>/dev/null || true
