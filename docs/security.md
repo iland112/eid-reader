@@ -93,6 +93,34 @@ Verifies chip data integrity via SOD digital signature chain:
 - PA is optional — graceful degradation if server unavailable or SOD bytes empty
 - Only cryptographic bytes transmitted; no PII (names, dates) leaves the device
 
+### VIZ Face Comparison Security
+
+On-device face comparison between camera-captured VIZ face and chip DG2 face image.
+All processing happens locally; PII never leaves the device.
+
+**Data flow security:**
+
+1. **Full-page image zeroing**: after face extraction, `fullPageImageBytes.fillRange(0, length, 0)` — the
+   full camera capture is not retained beyond the face crop step
+2. **Embedding vector zeroing**: in `VerifyViz.execute()`, both VIZ and chip embedding vectors are zeroed
+   in a `finally` block after cosine similarity calculation
+3. **VIZ face buffer zeroing**: `vizFaceImageBytes.fillRange(0, length, 0)` in `PassportDetailScreen.dispose()`
+4. **On-device TFLite model**: MobileFaceNet model is bundled as a Flutter asset — no runtime network
+   download, no model update mechanism, no external API calls
+5. **No PII logging**: similarity scores (numeric) are logged for debug; face bytes and embeddings are never logged
+
+**Contrast enhancement retry:**
+When initial face detection fails, `CaptureVizFace` creates a contrast-enhanced copy of the image
+(1.5x linear stretch) as a temporary JPEG file in `Directory.systemTemp`. This temp file is
+deleted in a `finally` block immediately after face detection, regardless of success or failure.
+No biometric data persists to disk beyond this brief processing window.
+
+**Files:**
+- `lib/features/passport_reader/domain/usecases/verify_viz.dart` — embedding comparison + zeroing
+- `lib/features/passport_reader/domain/usecases/capture_viz_face.dart` — face extraction + full-page zeroing + contrast retry
+- `lib/core/services/face_embedding_service.dart` — TFLite MobileFaceNet inference
+- `assets/models/mobilefacenet.tflite` — pre-trained model (~5MB, bundled)
+
 ## Not Yet Implemented
 
 | Measure | Description |
@@ -106,7 +134,11 @@ Verifies chip data integrity via SOD digital signature chain:
 
 Security features are tested in:
 - `test/core/platform/secure_screen_service_test.dart` - MethodChannel mock verification
-- `test/features/passport_reader/presentation/providers/passport_reader_provider_test.dart` - Error state handling, PA verification flow
-- `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` - Buffer zeroing on dispose
+- `test/features/passport_reader/presentation/providers/passport_reader_provider_test.dart` - Error state handling, PA verification flow, VIZ verification step
+- `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` - Buffer zeroing on dispose (face + VIZ buffers)
 - `test/core/image/jpeg2000_detector_test.dart` - JP2/J2K/JPEG format detection (15 tests)
 - `test/core/image/image_utils_test.dart` - Face image decode routing (3 tests)
+- `test/features/passport_reader/domain/usecases/verify_viz_test.dart` - Embedding zeroing, face comparison, MRZ cross-verification (15 tests)
+- `test/features/passport_reader/domain/usecases/capture_viz_face_test.dart` - Face extraction, quality analysis, contrast retry (9 tests)
+- `test/core/services/face_embedding_service_test.dart` - Cosine similarity math (8 tests)
+- `test/core/services/image_quality_analyzer_test.dart` - Blur/glare/saturation/contrast analysis (13 tests)

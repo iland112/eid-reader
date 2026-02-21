@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/mrz_utils.dart';
+
 /// Color-coded badge showing passport expiry status.
 ///
 /// - Green: valid (>1 year remaining)
@@ -12,7 +14,12 @@ class ExpiryDateBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final expiryDate = _parseYYMMDD(dateOfExpiry);
+    late final DateTime expiryDate;
+    try {
+      expiryDate = MrzUtils.parseYYMMDD(dateOfExpiry);
+    } catch (_) {
+      expiryDate = DateTime(2000);
+    }
     final now = DateTime.now();
     final remaining = expiryDate.difference(now);
 
@@ -50,7 +57,7 @@ class ExpiryDateBadge extends StatelessWidget {
           Icon(icon, size: 14, color: badgeColor),
           const SizedBox(width: 4),
           Text(
-            label,
+            '$label · ${MrzUtils.formatDisplayDate(dateOfExpiry)}',
             style: TextStyle(
               color: badgeColor,
               fontSize: 12,
@@ -62,13 +69,4 @@ class ExpiryDateBadge extends StatelessWidget {
     );
   }
 
-  /// Parses YYMMDD string to DateTime with 70-year pivot rule.
-  DateTime _parseYYMMDD(String yymmdd) {
-    if (yymmdd.length < 6) return DateTime(2000);
-    final yy = int.tryParse(yymmdd.substring(0, 2)) ?? 0;
-    final mm = int.tryParse(yymmdd.substring(2, 4)) ?? 1;
-    final dd = int.tryParse(yymmdd.substring(4, 6)) ?? 1;
-    final year = yy < 70 ? 2000 + yy : 1900 + yy;
-    return DateTime(year, mm, dd);
-  }
 }

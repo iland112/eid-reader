@@ -46,4 +46,48 @@ void main() {
       expect(MrzUtils.calculateCheckDigit('A1<'), 3);
     });
   });
+
+  group('MrzUtils.formatDisplayDate', () {
+    test('formats YYMMDD as DD MMM YYYY', () {
+      expect(MrzUtils.formatDisplayDate('940623'), '23 Jun 1994');
+    });
+
+    test('formats 2000s date', () {
+      expect(MrzUtils.formatDisplayDate('050315'), '15 Mar 2005');
+    });
+
+    test('pads single-digit day', () {
+      expect(MrzUtils.formatDisplayDate('900106'), '06 Jan 1990');
+    });
+
+    test('returns raw string for invalid length', () {
+      expect(MrzUtils.formatDisplayDate('12345'), '12345');
+      expect(MrzUtils.formatDisplayDate(''), '');
+    });
+
+    test('returns raw string for non-numeric input', () {
+      expect(MrzUtils.formatDisplayDate('ABCDEF'), 'ABCDEF');
+    });
+
+    test('isDob shifts future dates back 100 years', () {
+      // 690806 → 2069 (70-year pivot), but isDob shifts to 1969
+      expect(
+        MrzUtils.formatDisplayDate('690806', isDob: true),
+        '06 Aug 1969',
+      );
+    });
+
+    test('isDob keeps past dates unchanged', () {
+      // 900115 → 1990 (already in the past)
+      expect(
+        MrzUtils.formatDisplayDate('900115', isDob: true),
+        '15 Jan 1990',
+      );
+    });
+
+    test('DOE without isDob keeps future dates', () {
+      // 350315 → 2035 (valid expiry date)
+      expect(MrzUtils.formatDisplayDate('350315'), '15 Mar 2035');
+    });
+  });
 }

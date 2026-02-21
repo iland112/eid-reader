@@ -2,49 +2,54 @@ import 'package:flutter/material.dart';
 
 import '../providers/passport_reader_provider.dart';
 
-/// Horizontal step indicator showing 4 NFC reading phases.
+/// Horizontal step indicator showing NFC reading phases.
 ///
-/// Maps the detailed [ReadingStep] enum to 4 user-visible phases:
-/// Connect → Auth → Read → Verify
+/// Maps the detailed [ReadingStep] enum to user-visible phases:
+/// Connect → Auth → Read → Verify → VIZ (optional)
+///
+/// The VIZ phase is only shown when [showVizStep] is true
+/// (i.e., when a VIZ face was captured from the camera).
 class ReadingStepIndicator extends StatelessWidget {
   final ReadingStep step;
+  final bool showVizStep;
 
-  const ReadingStepIndicator({super.key, required this.step});
+  const ReadingStepIndicator({
+    super.key,
+    required this.step,
+    this.showVizStep = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final phase = _phaseFor(step);
     final isError = step == ReadingStep.error;
 
+    final steps = <_StepConfig>[
+      const _StepConfig('Connect', 0),
+      const _StepConfig('Auth', 1),
+      const _StepConfig('Read', 2),
+      const _StepConfig('Verify', 3),
+      if (showVizStep) const _StepConfig('VIZ', 4),
+    ];
+
+    final widgets = <Widget>[];
+    for (int i = 0; i < steps.length; i++) {
+      if (i > 0) {
+        widgets.add(_StepConnector(completed: phase > steps[i - 1].phase));
+      }
+      widgets.add(_StepDot(
+        label: steps[i].label,
+        state: _dotState(steps[i].phase, phase, isError),
+      ));
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        children: [
-          _StepDot(
-            label: 'Connect',
-            state: _dotState(0, phase, isError),
-          ),
-          _StepConnector(completed: phase > 0),
-          _StepDot(
-            label: 'Auth',
-            state: _dotState(1, phase, isError),
-          ),
-          _StepConnector(completed: phase > 1),
-          _StepDot(
-            label: 'Read',
-            state: _dotState(2, phase, isError),
-          ),
-          _StepConnector(completed: phase > 2),
-          _StepDot(
-            label: 'Verify',
-            state: _dotState(3, phase, isError),
-          ),
-        ],
-      ),
+      child: Row(children: widgets),
     );
   }
 
-  /// Maps detailed ReadingStep to a 0–3 phase index.
+  /// Maps detailed ReadingStep to a 0–4 phase index.
   int _phaseFor(ReadingStep step) {
     switch (step) {
       case ReadingStep.idle:
@@ -57,8 +62,11 @@ class ReadingStepIndicator extends StatelessWidget {
       case ReadingStep.readingSod:
         return 2;
       case ReadingStep.verifyingPa:
-      case ReadingStep.done:
         return 3;
+      case ReadingStep.verifyingViz:
+        return 4;
+      case ReadingStep.done:
+        return showVizStep ? 5 : 4;
       case ReadingStep.error:
         return -1; // handled separately
     }
@@ -66,9 +74,6 @@ class ReadingStepIndicator extends StatelessWidget {
 
   _DotState _dotState(int dotPhase, int currentPhase, bool isError) {
     if (isError) {
-      // On error, show the last active phase as error, previous as completed
-      // We use currentPhase = -1 for error, but we need to know which phase
-      // the error occurred in. We approximate by checking the step.
       final errorPhase = _errorPhase();
       if (dotPhase < errorPhase) return _DotState.completed;
       if (dotPhase == errorPhase) return _DotState.error;
@@ -80,10 +85,14 @@ class ReadingStepIndicator extends StatelessWidget {
   }
 
   int _errorPhase() {
-    // When error occurs, the step is still at error but we can infer
-    // which phase it was in from the state. Default to 0 (connect).
     return 0;
   }
+}
+
+class _StepConfig {
+  final String label;
+  final int phase;
+  const _StepConfig(this.label, this.phase);
 }
 
 enum _DotState { pending, active, completed, error }

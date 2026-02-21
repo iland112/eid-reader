@@ -123,13 +123,14 @@ void main() {
         ReadingStep.readingDg2,
         ReadingStep.readingSod,
         ReadingStep.verifyingPa,
+        ReadingStep.verifyingViz,
         ReadingStep.done,
         ReadingStep.error,
       ]));
     });
 
-    test('has 9 values total', () {
-      expect(ReadingStep.values.length, 9);
+    test('has 10 values total', () {
+      expect(ReadingStep.values.length, 10);
     });
   });
 

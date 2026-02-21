@@ -220,6 +220,8 @@ class _PcscScanScreenState extends ConsumerState<PcscScanScreen> {
         message = 'Reading security data...';
       case ReadingStep.verifyingPa:
         message = 'Verifying document authenticity...';
+      case ReadingStep.verifyingViz:
+        message = 'Comparing face with chip data...';
       case ReadingStep.done:
         message = 'Read complete!';
       case ReadingStep.error:

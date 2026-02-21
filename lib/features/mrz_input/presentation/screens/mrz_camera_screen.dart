@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../../../core/utils/mrz_utils.dart';
 import '../../domain/entities/mrz_data.dart';
 import '../providers/mrz_camera_provider.dart';
 
@@ -24,6 +26,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
   bool _isProcessingFrame = false;
   DateTime _lastProcessed = DateTime(2000);
   bool _isTorchOn = false;
+  bool _isCapturingViz = false;
 
   @override
   void initState() {
@@ -104,8 +107,52 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
       if (inputImage == null) return;
 
       await notifier.processImage(inputImage);
+
+      // If MRZ was just detected, capture VIZ
+      final state = ref.read(mrzCameraProvider);
+      if (state.detectedMrz != null &&
+          state.vizCaptureStatus == VizCaptureStatus.idle &&
+          !_isCapturingViz) {
+        _captureVizFromStill();
+      }
     } finally {
       _isProcessingFrame = false;
+    }
+  }
+
+  /// Captures a high-resolution still image for VIZ face detection.
+  Future<void> _captureVizFromStill() async {
+    if (_cameraController == null || _isCapturingViz) return;
+    _isCapturingViz = true;
+
+    try {
+      // Stop the image stream before taking a picture
+      await _cameraController!.stopImageStream();
+      _isStreamActive = false;
+
+      final xFile = await _cameraController!.takePicture();
+      final imageBytes = await File(xFile.path).readAsBytes();
+
+      // Build InputImage from the still file
+      final inputImage = InputImage.fromFilePath(xFile.path);
+
+      final notifier = ref.read(mrzCameraProvider.notifier);
+      await notifier.captureViz(
+        imageBytes: Uint8List.fromList(imageBytes),
+        inputImage: inputImage,
+      );
+
+      // Clean up the temp file
+      try {
+        await File(xFile.path).delete();
+      } catch (_) {}
+    } catch (e) {
+      // VIZ capture failure is non-fatal; MRZ data is still usable
+      if (mounted) {
+        setState(() {});
+      }
+    } finally {
+      _isCapturingViz = false;
     }
   }
 
@@ -177,6 +224,11 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
     return nv21;
   }
 
+  bool _isVizCapturing(MrzCameraState cameraState) {
+    return cameraState.vizCaptureStatus == VizCaptureStatus.idle ||
+        cameraState.vizCaptureStatus == VizCaptureStatus.detectingFace;
+  }
+
   void _onUseData(MrzData data) {
     Navigator.of(context).pop(data);
   }
@@ -209,7 +261,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scan MRZ'),
+        title: const Text('Scan Passport'),
         actions: [
           if (_isInitialized)
             IconButton(
@@ -279,17 +331,44 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
 
   Widget _buildOverlay() {
     return CustomPaint(
-      painter: _MrzOverlayPainter(),
-      child: const Center(
+      painter: _PassportOverlayPainter(),
+      child: Center(
         child: SizedBox(
           width: 320,
-          height: 80,
+          height: 200,
           child: DecoratedBox(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               border: Border.fromBorderSide(
-                BorderSide(color: Colors.white70, width: 2),
+                BorderSide(
+                  color: Colors.white70,
+                  width: 2,
+                ),
               ),
               borderRadius: BorderRadius.all(Radius.circular(8)),
+            ),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                decoration: const BoxDecoration(
+                  color: Colors.black38,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(6),
+                    bottomRight: Radius.circular(6),
+                  ),
+                ),
+                child: const Text(
+                  'MRZ',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -302,7 +381,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
       padding: const EdgeInsets.all(24),
       color: Theme.of(context).colorScheme.surface,
       child: cameraState.detectedMrz != null
-          ? _buildDetectedPanel(cameraState.detectedMrz!)
+          ? _buildDetectedPanel(cameraState)
           : _buildScanningPanel(cameraState),
     );
   }
@@ -317,7 +396,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
           const SizedBox(height: 4),
         const SizedBox(height: 12),
         Text(
-          'Position the MRZ area of your passport within the frame',
+          'Position the passport data page within the frame',
           style: Theme.of(context).textTheme.bodyMedium,
           textAlign: TextAlign.center,
         ),
@@ -347,7 +426,9 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
     );
   }
 
-  Widget _buildDetectedPanel(MrzData data) {
+  Widget _buildDetectedPanel(MrzCameraState cameraState) {
+    final data = cameraState.detectedMrz!;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -367,9 +448,45 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
           ],
         ),
         const SizedBox(height: 8),
-        _buildField('Document No.', data.documentNumber),
-        _buildField('Date of Birth', data.dateOfBirth),
-        _buildField('Date of Expiry', data.dateOfExpiry),
+        // MRZ line preview card
+        if (data.mrzLine1 != null && data.mrzLine2 != null)
+          _buildMrzPreviewCard(data.mrzLine1!, data.mrzLine2!),
+        const SizedBox(height: 8),
+        // VIZ face preview + MRZ fields
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Face preview thumbnail
+            _buildFacePreview(cameraState),
+            const SizedBox(width: 12),
+            // MRZ fields (expanded)
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (data.surname != null)
+                    _buildField(
+                      'Name',
+                      data.givenNames != null && data.givenNames!.isNotEmpty
+                          ? '${data.givenNames} ${data.surname}'
+                          : data.surname!,
+                    ),
+                  _buildField('Document No.', data.documentNumber),
+                  if (data.nationality != null)
+                    _buildField('Nationality', data.nationality!),
+                  _buildField('Date of Birth',
+                      MrzUtils.formatDisplayDate(data.dateOfBirth, isDob: true)),
+                  if (data.sex != null && data.sex!.isNotEmpty)
+                    _buildField('Sex', data.sex!),
+                  _buildField('Date of Expiry',
+                      MrzUtils.formatDisplayDate(data.dateOfExpiry)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        // VIZ capture status
+        _buildVizStatusRow(cameraState),
         const SizedBox(height: 16),
         Row(
           children: [
@@ -377,6 +494,9 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
               child: OutlinedButton(
                 onPressed: () {
                   ref.read(mrzCameraProvider.notifier).reset();
+                  if (_cameraController != null && !_isStreamActive) {
+                    _startImageStream();
+                  }
                 },
                 child: const Text('Rescan'),
               ),
@@ -384,13 +504,149 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton(
-                onPressed: () => _onUseData(data),
-                child: const Text('Use This Data'),
+                onPressed: _isVizCapturing(cameraState)
+                    ? null
+                    : () => _onUseData(data),
+                child: _isVizCapturing(cameraState)
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Use This Data'),
               ),
             ),
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildMrzPreviewCard(String line1, String line2) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        '$line1\n$line2',
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 9,
+          letterSpacing: 0.5,
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  Widget _buildFacePreview(MrzCameraState cameraState) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final faceBytes = cameraState.vizCapture?.vizFaceImageBytes;
+    final isDetecting =
+        cameraState.vizCaptureStatus == VizCaptureStatus.idle ||
+            cameraState.vizCaptureStatus == VizCaptureStatus.detectingFace;
+
+    return Container(
+      width: 64,
+      height: 80,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: faceBytes != null
+              ? colorScheme.primary
+              : colorScheme.outlineVariant,
+          width: 2,
+        ),
+        color: colorScheme.surfaceContainerHighest,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: faceBytes != null && faceBytes.isNotEmpty
+          ? Image.memory(
+              faceBytes,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Icon(
+                Icons.person,
+                size: 32,
+                color: colorScheme.outlineVariant,
+              ),
+            )
+          : isDetecting
+              ? Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colorScheme.outline,
+                    ),
+                  ),
+                )
+              : Icon(
+                  Icons.person_off,
+                  size: 32,
+                  color: colorScheme.outlineVariant,
+                ),
+    );
+  }
+
+  Widget _buildVizStatusRow(MrzCameraState cameraState) {
+    final IconData icon;
+    final Color color;
+    final String text;
+
+    switch (cameraState.vizCaptureStatus) {
+      case VizCaptureStatus.idle:
+      case VizCaptureStatus.detectingFace:
+        icon = Icons.face;
+        color = Theme.of(context).colorScheme.outline;
+        text = 'Detecting face...';
+      case VizCaptureStatus.ready:
+        final quality = cameraState.vizCapture?.qualityMetrics;
+        icon = Icons.face;
+        color = Theme.of(context).colorScheme.primary;
+        if (quality != null && quality.issues.isNotEmpty) {
+          text = 'Face captured (${quality.issues.first})';
+        } else {
+          text = 'Face captured';
+        }
+      case VizCaptureStatus.noFace:
+        icon = Icons.face_retouching_off;
+        color = Theme.of(context).colorScheme.error;
+        text = 'No face detected';
+      case VizCaptureStatus.error:
+        icon = Icons.warning_amber;
+        color = Theme.of(context).colorScheme.error;
+        text = 'Face detection failed';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: color,
+                ),
+          ),
+          if (cameraState.vizCaptureStatus == VizCaptureStatus.detectingFace)
+            const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -418,8 +674,8 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
   }
 }
 
-/// Paints a semi-transparent overlay with a clear window for MRZ scanning.
-class _MrzOverlayPainter extends CustomPainter {
+/// Paints a semi-transparent overlay with a clear window for passport page scanning.
+class _PassportOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = Colors.black54;
@@ -428,11 +684,11 @@ class _MrzOverlayPainter extends CustomPainter {
     final overlayPath = Path()
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
 
-    // Cut out the MRZ window
+    // Cut out the passport page window (larger than MRZ-only)
     final windowRect = Rect.fromCenter(
       center: Offset(size.width / 2, size.height / 2),
       width: 320,
-      height: 80,
+      height: 200,
     );
     final windowPath = Path()
       ..addRRect(RRect.fromRectAndRadius(windowRect, const Radius.circular(8)));

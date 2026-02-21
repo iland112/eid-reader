@@ -83,7 +83,10 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
           child: Column(
             children: [
               // Step progress indicator
-              ReadingStepIndicator(step: readerState.step),
+              ReadingStepIndicator(
+                step: readerState.step,
+                showVizStep: widget.mrzData.vizCaptureResult != null,
+              ),
               const Spacer(),
 
               // Animated pulse
@@ -220,6 +223,8 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
         message = 'Reading security data...';
       case ReadingStep.verifyingPa:
         message = 'Verifying document authenticity...';
+      case ReadingStep.verifyingViz:
+        message = 'Comparing face with chip data...';
       case ReadingStep.done:
         message = 'Scan complete!';
       case ReadingStep.error:

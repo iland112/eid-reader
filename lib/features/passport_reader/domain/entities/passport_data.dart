@@ -2,6 +2,9 @@ import 'dart:typed_data';
 
 import 'package:equatable/equatable.dart';
 
+import 'face_comparison_result.dart';
+import 'image_quality_metrics.dart';
+import 'mrz_field_comparison.dart';
 import 'pa_verification_result.dart';
 
 /// Parsed passport data from NFC reading.
@@ -21,6 +24,21 @@ class PassportData extends Equatable {
   final String authProtocol;
   final PaVerificationResult? paVerificationResult;
 
+  /// VIZ-chip face comparison result.
+  final FaceComparisonResult? faceComparisonResult;
+
+  /// Whether MRZ OCR fields match chip DG1 fields.
+  final bool? vizMrzFieldsMatch;
+
+  /// Image quality metrics for the VIZ face capture.
+  final ImageQualityMetrics? vizImageQuality;
+
+  /// VIZ face image bytes captured from camera (for side-by-side display).
+  final Uint8List? vizFaceBytes;
+
+  /// Per-field MRZ OCR vs chip comparison results.
+  final MrzFieldComparisonResult? vizMrzFieldComparison;
+
   /// NFC step timings in ms (debug diagnostics, excluded from equality).
   final Map<String, int> debugTimings;
 
@@ -39,6 +57,11 @@ class PassportData extends Equatable {
     this.activeAuthValid,
     this.authProtocol = 'BAC',
     this.paVerificationResult,
+    this.faceComparisonResult,
+    this.vizMrzFieldsMatch,
+    this.vizImageQuality,
+    this.vizFaceBytes,
+    this.vizMrzFieldComparison,
     this.debugTimings = const {},
   });
 
@@ -59,6 +82,11 @@ class PassportData extends Equatable {
     bool? activeAuthValid,
     String? authProtocol,
     PaVerificationResult? paVerificationResult,
+    FaceComparisonResult? faceComparisonResult,
+    bool? vizMrzFieldsMatch,
+    ImageQualityMetrics? vizImageQuality,
+    Uint8List? vizFaceBytes,
+    MrzFieldComparisonResult? vizMrzFieldComparison,
     Map<String, int>? debugTimings,
   }) {
     return PassportData(
@@ -76,6 +104,12 @@ class PassportData extends Equatable {
       activeAuthValid: activeAuthValid ?? this.activeAuthValid,
       authProtocol: authProtocol ?? this.authProtocol,
       paVerificationResult: paVerificationResult ?? this.paVerificationResult,
+      faceComparisonResult: faceComparisonResult ?? this.faceComparisonResult,
+      vizMrzFieldsMatch: vizMrzFieldsMatch ?? this.vizMrzFieldsMatch,
+      vizImageQuality: vizImageQuality ?? this.vizImageQuality,
+      vizFaceBytes: vizFaceBytes ?? this.vizFaceBytes,
+      vizMrzFieldComparison:
+          vizMrzFieldComparison ?? this.vizMrzFieldComparison,
       debugTimings: debugTimings ?? this.debugTimings,
     );
   }
@@ -95,5 +129,9 @@ class PassportData extends Equatable {
         activeAuthValid,
         authProtocol,
         paVerificationResult,
+        faceComparisonResult,
+        vizMrzFieldsMatch,
+        vizImageQuality,
+        vizMrzFieldComparison,
       ];
 }

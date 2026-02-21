@@ -29,6 +29,7 @@ lib/
 ├── core/           # Shared across features
 │   ├── error/      # Custom exception types
 │   ├── platform/   # NFC service abstraction (multi-platform)
+│   ├── services/   # Face detection, embedding, image quality
 │   ├── utils/      # MRZ utilities, image helpers
 │   └── widgets/    # Shared UI widgets
 └── features/
@@ -79,6 +80,8 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 | SVG Rendering | `flutter_svg` | Country flag SVG display |
 | Logging | `logging` | Structured logging |
 | Wakelock | `wakelock_plus` | Keeps screen on during NFC reading |
+| Face Detection | `google_mlkit_face_detection` | ML Kit face detection for VIZ capture |
+| Face Embedding | `tflite_flutter` | TFLite MobileFaceNet for on-device face comparison |
 
 ## Code Rules
 
@@ -142,7 +145,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - Never expose raw exception messages to users.
 
 ### Testing
-- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **183 tests across 17 files.**
+- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **351 tests across 30 files.**
 - **Manual mock pattern** (no mockito codegen due to analyzer 7.x incompatibility).
 - Use Riverpod `ProviderContainer` overrides for dependency injection in tests.
 - For `MethodChannel` testing, use `TestDefaultBinaryMessengerBinding`.
@@ -174,7 +177,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `lib/core/utils/country_code_utils.dart` - ISO 3166-1 alpha-3 → alpha-2 mapping (249+ countries)
 - `lib/app/theme_mode_provider.dart` - Dark/light mode toggle (Riverpod StateNotifier)
 - `lib/features/passport_reader/presentation/widgets/nfc_pulse_animation.dart` - Animated NFC pulse rings via CustomPainter
-- `lib/features/passport_reader/presentation/widgets/reading_step_indicator.dart` - 4-phase step indicator
+- `lib/features/passport_reader/presentation/widgets/reading_step_indicator.dart` - 5-phase step indicator (Connect → Auth → Read → Verify → VIZ)
 - `lib/features/passport_display/presentation/widgets/passport_header_card.dart` - Passport-style header with Hero photo
 - `lib/features/passport_display/presentation/widgets/info_section_card.dart` - Reusable card with icon, title, rows
 - `lib/features/passport_display/presentation/widgets/expiry_date_badge.dart` - Color-coded expiry status badge
@@ -183,12 +186,25 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `lib/features/passport_reader/data/datasources/pa_service.dart` - PA verification service interface
 - `lib/features/passport_reader/data/datasources/http_pa_service.dart` - HTTP PA Service REST API client
 - `lib/features/passport_reader/domain/entities/pa_verification_result.dart` - PA 8-step verification result entity
-- `lib/features/passport_reader/presentation/providers/passport_reader_provider.dart` - Notifier with NFC + PA orchestration
+- `lib/features/passport_reader/presentation/providers/passport_reader_provider.dart` - Notifier with NFC + PA + VIZ orchestration
 - `lib/features/passport_display/presentation/screens/passport_detail_screen.dart` - Secure display with buffer clearing
 - `lib/features/mrz_input/domain/usecases/validate_mrz.dart` - ICAO 9303 MRZ validation
 - `lib/features/mrz_input/domain/usecases/parse_mrz_from_text.dart` - MRZ OCR text parser (TD3 format)
-- `lib/features/mrz_input/presentation/screens/mrz_camera_screen.dart` - Camera-based MRZ scanning screen
-- `lib/features/mrz_input/presentation/providers/mrz_camera_provider.dart` - Camera scan state management
+- `lib/features/mrz_input/presentation/screens/mrz_camera_screen.dart` - Camera-based MRZ + VIZ scanning screen
+- `lib/features/mrz_input/presentation/providers/mrz_camera_provider.dart` - Camera scan + VIZ capture state management
+- `lib/features/mrz_input/domain/entities/viz_capture_result.dart` - VIZ capture result (face bytes + quality metrics)
+- `lib/features/passport_reader/domain/entities/face_comparison_result.dart` - Face comparison result entity
+- `lib/features/passport_reader/domain/entities/image_quality_metrics.dart` - Image quality metrics entity
+- `lib/features/passport_reader/domain/usecases/capture_viz_face.dart` - Face extraction from camera image
+- `lib/features/passport_reader/domain/usecases/verify_viz.dart` - VIZ-chip cross-verification use case
+- `lib/core/services/face_detection_service.dart` - ML Kit face detection abstraction
+- `lib/core/services/face_embedding_service.dart` - TFLite MobileFaceNet face embedding
+- `lib/core/services/image_quality_analyzer.dart` - Image quality analysis (blur, glare, saturation, contrast)
+- `lib/features/passport_display/presentation/widgets/viz_verification_card.dart` - VIZ verification display card (per-field MRZ comparison)
+- `lib/features/passport_display/presentation/widgets/face_comparison_badge.dart` - Face match status badge
+- `lib/features/mrz_input/domain/usecases/mrz_ocr_corrector.dart` - Position-aware MRZ OCR character correction
+- `lib/core/utils/icao_codes.dart` - ICAO state code validation + single-char OCR correction
+- `lib/features/passport_reader/domain/entities/mrz_field_comparison.dart` - Per-field OCR vs chip comparison entity
 - `android/app/src/main/kotlin/com/smartcoreinc/eid_reader/MainActivity.kt` - Native FLAG_SECURE handler
 - `.devcontainer/Dockerfile` - Development environment
 - `pubspec.yaml` - Dependencies (note: dmrtd is a git dependency)

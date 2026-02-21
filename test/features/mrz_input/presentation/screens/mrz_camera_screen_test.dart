@@ -15,51 +15,81 @@ class _TestBottomPanel extends ConsumerWidget {
     final detected = cameraState.detectedMrz;
 
     if (detected != null) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.check_circle,
-                color: Theme.of(context).colorScheme.primary,
+      return SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'MRZ Detected',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // MRZ line preview card
+            if (detected.mrzLine1 != null && detected.mrzLine2 != null)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color:
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '${detected.mrzLine1}\n${detected.mrzLine2}',
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 9,
+                  ),
+                  maxLines: 2,
+                ),
               ),
-              const SizedBox(width: 8),
+            const SizedBox(height: 8),
+            // Expanded MRZ fields
+            if (detected.surname != null)
               Text(
-                'MRZ Detected',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text('Document No.: ${detected.documentNumber}'),
-          Text('Date of Birth: ${detected.dateOfBirth}'),
-          Text('Date of Expiry: ${detected.dateOfExpiry}'),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    ref.read(mrzCameraProvider.notifier).reset();
-                  },
-                  child: const Text('Rescan'),
+                  'Name: ${detected.givenNames != null && detected.givenNames!.isNotEmpty ? '${detected.givenNames} ${detected.surname}' : detected.surname}'),
+            Text('Document No.: ${detected.documentNumber}'),
+            if (detected.nationality != null)
+              Text('Nationality: ${detected.nationality}'),
+            Text('Date of Birth: ${detected.dateOfBirth}'),
+            if (detected.sex != null && detected.sex!.isNotEmpty)
+              Text('Sex: ${detected.sex}'),
+            Text('Date of Expiry: ${detected.dateOfExpiry}'),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      ref.read(mrzCameraProvider.notifier).reset();
+                    },
+                    child: const Text('Rescan'),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(detected);
-                  },
-                  child: const Text('Use This Data'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop(detected);
+                    },
+                    child: const Text('Use This Data'),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       );
     }
 
@@ -155,9 +185,10 @@ void main() {
       await tester.pumpWidget(_buildTestApp(notifier: notifier));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('L898902C'), findsOneWidget);
-      expect(find.textContaining('690806'), findsOneWidget);
-      expect(find.textContaining('940623'), findsOneWidget);
+      // Document number appears in MRZ preview card + field display
+      expect(find.textContaining('L898902C'), findsWidgets);
+      expect(find.textContaining('690806'), findsWidgets);
+      expect(find.textContaining('940623'), findsWidgets);
     });
 
     testWidgets('shows Use This Data and Rescan buttons when detected',
@@ -206,6 +237,40 @@ void main() {
 
       expect(find.text('Use This Data'), findsNothing);
       expect(find.text('Rescan'), findsNothing);
+    });
+
+    testWidgets('shows MRZ line preview card when MRZ detected',
+        (tester) async {
+      final mockService = _MockTextRecognitionService();
+      final notifier = MrzCameraNotifier(recognitionService: mockService);
+
+      const line1 = 'P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<';
+      const line2 = 'L898902C<3UTO6908061F9406236ZE184226B<<<<<14';
+      notifier.processText('$line1\n$line2');
+
+      await tester.pumpWidget(_buildTestApp(notifier: notifier));
+      await tester.pumpAndSettle();
+
+      // Should show the raw MRZ lines
+      expect(find.textContaining('P<UTOERIKSSON'), findsOneWidget);
+      expect(find.textContaining('L898902C<3UTO'), findsOneWidget);
+    });
+
+    testWidgets('shows expanded fields when MRZ detected', (tester) async {
+      final mockService = _MockTextRecognitionService();
+      final notifier = MrzCameraNotifier(recognitionService: mockService);
+
+      const line1 = 'P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<';
+      const line2 = 'L898902C<3UTO6908061F9406236ZE184226B<<<<<14';
+      notifier.processText('$line1\n$line2');
+
+      await tester.pumpWidget(_buildTestApp(notifier: notifier));
+      await tester.pumpAndSettle();
+
+      // Should show name, nationality, sex from parsed MRZ
+      expect(find.textContaining('ANNA MARIA ERIKSSON'), findsOneWidget);
+      expect(find.textContaining('UTO'), findsWidgets);
+      expect(find.textContaining('F'), findsWidgets);
     });
   });
 }

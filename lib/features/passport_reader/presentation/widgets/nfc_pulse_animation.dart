@@ -51,6 +51,7 @@ class _NfcPulseAnimationState extends State<NfcPulseAnimation>
       case ReadingStep.readingSod:
         return const Duration(milliseconds: 1200);
       case ReadingStep.verifyingPa:
+      case ReadingStep.verifyingViz:
       case ReadingStep.done:
       case ReadingStep.error:
         return const Duration(milliseconds: 2000);
@@ -66,6 +67,7 @@ class _NfcPulseAnimationState extends State<NfcPulseAnimation>
       case ReadingStep.readingDg2:
       case ReadingStep.readingSod:
       case ReadingStep.verifyingPa:
+      case ReadingStep.verifyingViz:
         _controller.repeat();
       case ReadingStep.done:
         _controller.stop();
@@ -131,6 +133,7 @@ class _NfcPulseAnimationState extends State<NfcPulseAnimation>
       case ReadingStep.readingSod:
         icon = Icons.contactless;
       case ReadingStep.verifyingPa:
+      case ReadingStep.verifyingViz:
         icon = Icons.verified_user;
       case ReadingStep.done:
         icon = Icons.check_circle;

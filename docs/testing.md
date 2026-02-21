@@ -2,8 +2,8 @@
 
 ## Overview
 
-- **Total tests**: 203
-- **Test files**: 19 (15 unit + 4 widget)
+- **Total tests**: 351
+- **Test files**: 30 (25 unit + 5 widget)
 - **Framework**: `flutter_test`
 - **Mock strategy**: Manual mocks (no mockito codegen)
 - **CI command**: `flutter test`
@@ -19,9 +19,9 @@ the abstract interfaces directly.
 
 ### Core
 
-#### `test/core/utils/mrz_utils_test.dart` (9 tests)
+#### `test/core/utils/mrz_utils_test.dart` (17 tests)
 
-Tests ICAO 9303 MRZ check digit calculation with weights `[7, 3, 1]`.
+Tests ICAO 9303 MRZ check digit calculation and date display formatting.
 
 | Test | Description |
 |---|---|
@@ -75,17 +75,66 @@ Tests the Android stub implementation of PcscService.
 | listReaders | Returns empty list |
 | Multiple calls | Consistent results across repeated calls |
 
+#### `test/core/services/image_quality_analyzer_test.dart` (13 tests)
+
+Tests `DefaultImageQualityAnalyzer` with synthetic test images.
+
+| Group | Tests |
+|---|---|
+| Blur detection | Sharp image (varied pixels) vs uniform image (all same color), Laplacian variance thresholds |
+| Glare detection | All-white (high glare), all-black (no glare), mixed brightness |
+| Saturation analysis | Uniform color (low std dev), rainbow image (high std dev for hologram detection) |
+| Contrast | High contrast (black/white), low contrast (uniform gray) |
+| Overall | Score computation, quality level classification, issue detection for blur/glare |
+
+#### `test/core/services/face_embedding_service_test.dart` (8 tests)
+
+Tests `cosineSimilarity()` function (pure math, no TFLite model needed).
+
+| Test | Description |
+|---|---|
+| Identical vectors | Returns 1.0 |
+| Opposite vectors | Returns -1.0 |
+| Orthogonal vectors | Returns 0.0 |
+| Empty vectors | Returns 0.0 |
+| Zero vectors | Returns 0.0 (division by zero guard) |
+| Scaled vectors | Returns 1.0 (direction-only) |
+| Different lengths | Returns 0.0 |
+| High-dimensional | Correct computation with 192D vectors |
+
+#### `test/core/utils/country_code_utils_test.dart` (12 tests)
+
+Tests ISO 3166-1 alpha-3 to alpha-2 conversion and flag asset path generation.
+
+| Group | Tests |
+|---|---|
+| alpha3ToAlpha2 | KOR→kr, USA→us, GBR→gb, DEU→de, JPN→jp, case-insensitive, unknown→null, empty→null, D<<→de |
+| flagAssetPath | KOR→assets/svg/kr.svg, USA→assets/svg/us.svg, unknown→null |
+
 ### Feature: MRZ Input
 
-#### `test/features/mrz_input/domain/entities/mrz_data_test.dart` (3 tests)
+#### `test/features/mrz_input/domain/entities/mrz_data_test.dart` (7 tests)
 
 | Test | Description |
 |---|---|
 | Equality | Two identical `MrzData` instances are equal |
 | Inequality | Different field values are not equal |
 | Props | Equatable props list is correct |
+| Optional fields | New fields (surname, givenNames, nationality, etc.) |
+| withVizCapture | Preserves all fields including optional ones |
+| Raw MRZ lines | mrzLine1/mrzLine2 stored and compared |
+| Equality with all fields | Full MrzData equality including optional fields |
 
-#### `test/features/mrz_input/domain/usecases/validate_mrz_test.dart` (17 tests)
+#### `test/features/mrz_input/domain/entities/viz_capture_result_test.dart` (4 tests)
+
+| Test | Description |
+|---|---|
+| Face bytes storage | Stores and retrieves vizFaceImageBytes |
+| Bounding box | Stores face bounding box coordinates |
+| Quality metrics | Stores quality metrics with correct levels |
+| Issues propagation | Quality issues accessible from capture result |
+
+#### `test/features/mrz_input/domain/usecases/validate_mrz_test.dart` (23 tests)
 
 | Group | Tests |
 |---|---|
@@ -94,7 +143,32 @@ Tests the Android stub implementation of PcscService.
 | Full MRZ validation | Valid complete input, each field invalid individually |
 | Edge cases | Boundary dates (010101, 991231), filler chars in doc number |
 
-#### `test/features/mrz_input/domain/usecases/parse_mrz_from_text_test.dart` (16 tests)
+#### `test/features/mrz_input/domain/usecases/mrz_ocr_corrector_test.dart` (20 tests)
+
+Tests position-aware OCR character correction for MRZ lines.
+
+| Group | Tests |
+|---|---|
+| Line 1 correction | Alpha context: 0→O, 1→I, 8→B, 5→S, 2→Z, 6→G, 7→T; preserves fillers and valid input |
+| Line 2 correction | Check digit positions (digit-only), DOB/DOE positions, nationality (alpha-only), sex position, alphanumeric passthrough |
+
+#### `test/core/utils/icao_codes_test.dart` (10 tests)
+
+Tests ICAO state code validation and single-char OCR correction.
+
+| Test | Description |
+|---|---|
+| Valid codes | USA, KOR, GBR, JPN, DEU recognized |
+| Invalid codes | XYZ, ZZZ, ABC rejected |
+| Case insensitive | usa, Kor accepted |
+| UTO test code | Recognized as valid |
+| Single-char correction | G8R → GBR, K0R → KOR |
+| Uncorrectable | ZZZ returns null |
+| Unchanged valid | USA returns USA |
+| Ambiguous | Multiple corrections → null |
+| Wrong length | Too short/long → null |
+
+#### `test/features/mrz_input/domain/usecases/parse_mrz_from_text_test.dart` (32 tests)
 
 Tests ICAO 9303 TD3 MRZ parsing from raw OCR text.
 
@@ -117,7 +191,7 @@ Tests ICAO 9303 TD3 MRZ parsing from raw OCR text.
 | Line 1 bad prefix | Returns null when line 1 doesn't start with P |
 | Short lines | Returns null for lines < 44 characters |
 
-#### `test/features/mrz_input/presentation/providers/mrz_input_provider_test.dart` (11 tests)
+#### `test/features/mrz_input/presentation/providers/mrz_input_provider_test.dart` (15 tests)
 
 | Test | Description |
 |---|---|
@@ -133,9 +207,9 @@ Tests ICAO 9303 TD3 MRZ parsing from raw OCR text.
 | Provider type | Correct provider type check |
 | Multiple updates | Sequential updates work correctly |
 
-#### `test/features/mrz_input/presentation/providers/mrz_camera_provider_test.dart` (10 tests)
+#### `test/features/mrz_input/presentation/providers/mrz_camera_provider_test.dart` (12 tests)
 
-Tests MRZ camera scanning state management with mock `TextRecognitionService`.
+Tests MRZ camera scanning state management with mock `TextRecognitionService` and multi-frame consensus.
 
 | Test | Description |
 |---|---|
@@ -146,13 +220,15 @@ Tests MRZ camera scanning state management with mock `TextRecognitionService`.
 | processText invalid | Does not update state for non-MRZ text |
 | reset | Clears detected MRZ and resets state |
 | Provider type | Correct provider type with override |
-| processImage detects | ML Kit OCR → MRZ detection pipeline |
+| processImage detects | ML Kit OCR → MRZ detection (consensusCount=1) |
 | processImage no MRZ | Returns empty state when no MRZ found |
 | processImage skip | Skips processing when already detected |
+| Consensus N frames | Requires N matching frames before confirming |
+| Reset clears consensus | Reset clears accumulated candidates |
 
 ### Feature: Passport Reader
 
-#### `test/features/passport_reader/domain/entities/passport_data_test.dart` (13 tests)
+#### `test/features/passport_reader/domain/entities/passport_data_test.dart` (14 tests)
 
 | Test | Description |
 |---|---|
@@ -170,7 +246,7 @@ Tests MRZ camera scanning state management with mock `TextRecognitionService`.
 | faceImageBytes default | Defaults to null |
 | Equality same values | Two identical instances are equal |
 
-#### `test/features/passport_reader/domain/entities/pa_verification_result_test.dart` (10 tests)
+#### `test/features/passport_reader/domain/entities/pa_verification_result_test.dart` (11 tests)
 
 | Test | Description |
 |---|---|
@@ -185,6 +261,91 @@ Tests MRZ camera scanning state management with mock `TextRecognitionService`.
 | Equality same | Two identical instances are equal |
 | Equality different | Different values are not equal |
 
+#### `test/features/passport_reader/domain/entities/face_comparison_result_test.dart` (8 tests)
+
+| Test | Description |
+|---|---|
+| isMatch above threshold | Returns true when similarity >= threshold |
+| isMatch below threshold | Returns false when similarity < threshold |
+| High confidence | >= 0.65 similarity |
+| Medium confidence | 0.50-0.65 similarity |
+| Low confidence | 0.35-0.50 similarity |
+| Unreliable | < 0.35 similarity |
+| Equality same | Equatable comparison |
+| Equality different | Different values are not equal |
+
+#### `test/features/passport_reader/domain/entities/image_quality_metrics_test.dart` (9 tests)
+
+| Test | Description |
+|---|---|
+| Good quality | Overall score >= 0.7 |
+| Acceptable quality | Overall score 0.5-0.7 |
+| Poor quality | Overall score 0.3-0.5 |
+| Unusable quality | Overall score < 0.3 |
+| Boundary good | Exact 0.7 → good |
+| Boundary acceptable | Exact 0.5 → acceptable |
+| Boundary poor | Exact 0.3 → poor |
+| Equality | Equatable comparison |
+| Default issues | Empty issues list by default |
+
+> Note: Some test tables may not list every individual test case (e.g. when tests
+> were added across sessions). The counts in parentheses are the authoritative numbers.
+
+#### `test/features/passport_reader/domain/entities/mrz_field_comparison_test.dart` (8 tests)
+
+Tests `MrzFieldMatch` and `MrzFieldComparisonResult` entities.
+
+| Test | Description |
+|---|---|
+| Match construction | Creates matching field with correct values |
+| Mismatch construction | Creates mismatched field |
+| allMatch true | All fields matching → true |
+| allMatch false | Any field mismatched → false |
+| matchCount | Counts matching fields correctly |
+| totalFields | Counts total fields |
+| Equality | Equatable comparison |
+| Empty result | Empty field list → allMatch true, count 0 |
+
+#### `test/features/passport_reader/domain/usecases/capture_viz_face_test.dart` (9 tests)
+
+Tests `CaptureVizFace` use case with mocked face detection service and contrast enhancement retry.
+
+| Test | Description |
+|---|---|
+| No faces detected | Returns null |
+| Face detected | Returns VizCaptureResult with cropped face |
+| Largest face selection | Picks largest face from multiple detections |
+| Quality metrics | Result includes quality analysis |
+| Face at boundary | Handles faces at image edge (clamp to bounds) |
+| 20% padding | Crop includes padding around face |
+| Quality issues | Issues propagated to result |
+| Retry with contrast | Retries with 1.5x contrast enhancement on first failure |
+| No retry on success | Skips retry when first attempt succeeds (1 call) |
+| Both attempts fail | Returns null after 2 failed attempts |
+
+#### `test/features/passport_reader/domain/usecases/verify_viz_test.dart` (15 tests)
+
+Tests `VerifyViz` use case for VIZ-chip cross-verification and field-by-field comparison.
+
+| Test | Description |
+|---|---|
+| MRZ fields match | All fields match → vizMrzFieldsMatch=true |
+| MRZ fields mismatch | Different doc number → vizMrzFieldsMatch=false |
+| Date format conversion | YYYYMMDD chip dates compared against YYMMDD OCR dates |
+| Face match high | Similarity >= 0.65 → high confidence |
+| Face match medium | Similarity 0.50-0.65 → medium confidence |
+| Face mismatch | Similarity < 0.35 → unreliable |
+| Quality threshold adjustment | Poor quality reduces match threshold by 0.15 |
+| Null chip face | Skips face comparison when DG2 face is null |
+| Null VIZ face | Skips face comparison when VIZ face is null |
+| Embedding zeroing | Embeddings zeroed in finally block |
+| Field comparison all match | Per-field comparison with all fields matching |
+| Field comparison mismatch | Per-field mismatch detection |
+| Field comparison optional | Only compares fields that OCR extracted |
+| Field comparison names | Case-insensitive name comparison with truncation support |
+| Field comparison dates | YYMMDD↔YYYYMMDD date comparison |
+| Field comparison sex | Sex field comparison |
+
 #### `test/features/passport_reader/data/datasources/http_pa_service_test.dart` (8 tests)
 
 | Test | Description |
@@ -198,12 +359,12 @@ Tests MRZ camera scanning state management with mock `TextRecognitionService`.
 | URL construction | Sends request to correct `/api/pa/verify` URL |
 | Content-Type | Sets `application/json` header |
 
-#### `test/features/passport_reader/presentation/providers/passport_reader_provider_test.dart` (24 tests)
+#### `test/features/passport_reader/presentation/providers/passport_reader_provider_test.dart` (18 tests)
 
 | Group | Tests |
 |---|---|
 | PassportReaderState | Default values, copyWith, errorMessage reset |
-| ReadingStep | 9 enum values (idle, connecting, authenticating, readingDg1, readingDg2, readingSod, verifyingPa, done, error) |
+| ReadingStep | 10 enum values (idle, connecting, authenticating, readingDg1, readingDg2, readingSod, verifyingPa, verifyingViz, done, error) |
 | PassportReaderNotifier | Initial state, reset |
 | With mock datasource | Success flow, TagLost error, auth failure, timeout, generic error, reset after read |
 | With PA service | PA success → passiveAuthValid=true, PA INVALID → false, PA failure → graceful, skips PA when SOD empty |
@@ -228,7 +389,7 @@ Tests MRZ camera scanning state management with mock `TextRecognitionService`.
 
 ### Widget: MRZ Camera Screen
 
-#### `test/features/mrz_input/presentation/screens/mrz_camera_screen_test.dart` (7 tests)
+#### `test/features/mrz_input/presentation/screens/mrz_camera_screen_test.dart` (9 tests)
 
 Tests the MRZ camera scanning UI states using `MrzCameraNotifier` with mock
 `TextRecognitionService`. Uses extracted bottom panel widget for hardware-free testing.
@@ -242,6 +403,8 @@ Tests the MRZ camera scanning UI states using `MrzCameraNotifier` with mock
 | Action buttons | Shows 'Use This Data' and 'Rescan' buttons |
 | Rescan button | Clears detected MRZ, returns to scanning view |
 | No buttons idle | Hides action buttons when no MRZ detected |
+| MRZ line preview | Shows raw MRZ line 1 and line 2 in monospace card |
+| Extended fields | Shows name, nationality, sex in detected panel |
 
 ### Widget: NFC Scan Screen
 
@@ -290,6 +453,23 @@ card-based layout with `PassportHeaderCard` + `InfoSectionCard` widgets.
 | PA details section | Shows 'PA Verification Details' header with PA result |
 | PA cert chain details | Shows cert chain, SOD sig, DG hash, timing |
 | PA error message | Shows error message for failed PA verification |
+
+### Widget: VIZ Verification Card
+
+#### `test/features/passport_display/presentation/widgets/viz_verification_card_test.dart` (8 tests)
+
+Tests `VizVerificationCard` widget with per-field MRZ comparison display and boolean fallback.
+
+| Test | Description |
+|---|---|
+| Per-field results | Shows field names and summary (e.g. '1/2 match') |
+| All match summary | Shows all-match count and check circle icon |
+| Mismatch values | Shows OCR value != chip value for mismatched fields |
+| Boolean fallback true | 'MRZ fields match chip data' when no fieldComparison |
+| Boolean fallback false | 'MRZ fields mismatch' when no fieldComparison |
+| Card title | Shows 'VIZ Verification' with compare icon |
+| Check icons | Shows check icon for matching fields |
+| Close icons | Shows close icon for mismatching fields |
 
 ## Running Tests
 

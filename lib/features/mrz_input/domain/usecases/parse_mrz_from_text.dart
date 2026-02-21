@@ -1,5 +1,6 @@
 import '../../../../core/utils/mrz_utils.dart';
 import '../entities/mrz_data.dart';
+import 'mrz_ocr_corrector.dart';
 
 /// Parses ICAO 9303 TD3 (passport) MRZ from raw OCR text.
 ///
@@ -10,14 +11,35 @@ class ParseMrzFromText {
   static final _mrzLinePattern = RegExp(r'^[A-Z0-9<]{44}$');
   static final _line1Pattern = RegExp(r'^P[A-Z<]{43}$');
 
+  final MrzOcrCorrector _corrector = MrzOcrCorrector();
+
   /// Parses OCR text and extracts MRZ data.
   /// Returns null if no valid MRZ is found.
   MrzData? parse(String ocrText) {
     final lines = _findMrzLines(ocrText);
     if (lines == null) return null;
 
+    final line1 = lines.$1;
     final line2 = lines.$2;
-    return _extractFromLine2(line2);
+
+    final line2Data = _extractFromLine2(line2);
+    if (line2Data == null) return null;
+
+    final line1Data = _extractFromLine1(line1);
+
+    return MrzData(
+      documentNumber: line2Data.documentNumber,
+      dateOfBirth: line2Data.dateOfBirth,
+      dateOfExpiry: line2Data.dateOfExpiry,
+      mrzLine1: line1,
+      mrzLine2: line2,
+      documentType: line1Data?.documentType,
+      issuingState: line1Data?.issuingState,
+      surname: line1Data?.surname,
+      givenNames: line1Data?.givenNames,
+      nationality: line2Data.nationality,
+      sex: line2Data.sex,
+    );
   }
 
   /// Finds the two MRZ lines from OCR text.
@@ -48,12 +70,13 @@ class ParseMrzFromText {
 
       if (c1 == null || c2 == null) continue;
 
-      // Apply OCR error correction on line 2 (digit/alpha context)
-      final c2Corrected = _correctOcrErrors(c2);
+      // Apply OCR error correction
+      final c1Corrected = _corrector.correctLine1(c1);
+      final c2Corrected = _corrector.correctLine2(c2);
 
-      if (_line1Pattern.hasMatch(c1) &&
+      if (_line1Pattern.hasMatch(c1Corrected) &&
           _mrzLinePattern.hasMatch(c2Corrected)) {
-        return (c1, c2Corrected);
+        return (c1Corrected, c2Corrected);
       }
     }
 
@@ -83,52 +106,35 @@ class ParseMrzFromText {
         .replaceAll('«', '<');
   }
 
-  /// Applies common OCR character corrections for MRZ text.
-  /// MRZ uses OCR-B font; ML Kit often misreads these characters.
-  String _correctOcrErrors(String line) {
-    final buffer = StringBuffer();
-    for (int i = 0; i < line.length; i++) {
-      var c = line[i];
-      // Common OCR-B misreads
-      if (c == 'O' && _isDigitContext(line, i)) c = '0';
-      if (c == 'Q' && _isDigitContext(line, i)) c = '0';
-      if (c == 'I' && _isDigitContext(line, i)) c = '1';
-      if (c == 'l' || c == 'L' && _isDigitContext(line, i)) {
-        c = '1';
-      }
-      if (c == 'S' && _isDigitContext(line, i)) c = '5';
-      if (c == 'Z' && _isDigitContext(line, i)) c = '2';
-      if (c == 'B' && _isDigitContext(line, i)) c = '8';
-      if (c == 'G' && _isDigitContext(line, i)) c = '6';
-      if (c == 'D' && _isDigitContext(line, i)) c = '0';
-      // Reverse: digit in alpha context
-      if (c == '0' && _isAlphaContext(line, i)) c = 'O';
-      if (c == '1' && _isAlphaContext(line, i)) c = 'I';
-      if (c == '8' && _isAlphaContext(line, i)) c = 'B';
-      buffer.write(c);
-    }
-    return buffer.toString();
-  }
+  /// Extracts fields from Line 1 of TD3 format.
+  ///
+  /// TD3 Line 1 layout (44 chars):
+  /// [0-1]  Document type (e.g., "P<")
+  /// [2-4]  Issuing state (3 chars)
+  /// [5-43] Name: SURNAME<<GIVEN<NAMES<<<<...
+  ({String documentType, String issuingState, String surname, String givenNames})?
+  _extractFromLine1(String line1) {
+    if (line1.length != 44) return null;
 
-  /// Returns true if position i in MRZ line 2 is expected to be a digit.
-  /// TD3 Line 2: positions 9, 13-19, 21-27, 43 are digits/check digits.
-  bool _isDigitContext(String line, int i) {
-    if (line.length != 44) return false;
-    // Check digit positions
-    if (i == 9 || i == 19 || i == 27 || i == 43) return true;
-    // Date of birth (13-18) and date of expiry (21-26)
-    if (i >= 13 && i <= 18) return true;
-    if (i >= 21 && i <= 26) return true;
-    return false;
-  }
+    final docType = line1.substring(0, 2).replaceAll('<', '').trim();
+    final issuingState = line1.substring(2, 5).replaceAll('<', '').trim();
+    final nameField = line1.substring(5);
 
-  /// Returns true if position i in MRZ line 1 is expected to be alpha.
-  /// TD3 Line 1: all positions are alpha or filler (<).
-  bool _isAlphaContext(String line, int i) {
-    if (line.length != 44) return false;
-    // Nationality (10-12) is always alpha
-    if (i >= 10 && i <= 12) return true;
-    return false;
+    // ICAO 9303: surname and given names separated by <<
+    final nameParts = nameField.split('<<');
+    final surname = nameParts[0].replaceAll('<', ' ').trim();
+    final givenNames = nameParts.length > 1
+        ? nameParts.sublist(1).join(' ').replaceAll('<', ' ').trim()
+        : '';
+
+    if (docType.isEmpty) return null;
+
+    return (
+      documentType: docType,
+      issuingState: issuingState,
+      surname: surname,
+      givenNames: givenNames,
+    );
   }
 
   /// Extracts MRZ fields from line 2 of TD3 format.
@@ -144,14 +150,22 @@ class ParseMrzFromText {
   /// [27]    Check digit for expiry
   /// [28-42] Optional data (15 chars)
   /// [43]    Overall check digit
-  MrzData? _extractFromLine2(String line2) {
+  ({
+    String documentNumber,
+    String dateOfBirth,
+    String dateOfExpiry,
+    String nationality,
+    String sex,
+  })? _extractFromLine2(String line2) {
     if (line2.length != 44) return null;
 
     // Extract fields
     final docNumberRaw = line2.substring(0, 9);
     final docNumberCheckDigit = int.tryParse(line2[9]);
+    final nationality = line2.substring(10, 13).replaceAll('<', '').trim();
     final dateOfBirth = line2.substring(13, 19);
     final dobCheckDigit = int.tryParse(line2[19]);
+    final sex = line2[20];
     final dateOfExpiry = line2.substring(21, 27);
     final doeCheckDigit = int.tryParse(line2[27]);
 
@@ -180,10 +194,12 @@ class ParseMrzFromText {
     if (!RegExp(r'^[0-9]{6}$').hasMatch(dateOfExpiry)) return null;
     if (documentNumber.isEmpty) return null;
 
-    return MrzData(
+    return (
       documentNumber: documentNumber,
       dateOfBirth: dateOfBirth,
       dateOfExpiry: dateOfExpiry,
+      nationality: nationality,
+      sex: sex == '<' ? '' : sex,
     );
   }
 }

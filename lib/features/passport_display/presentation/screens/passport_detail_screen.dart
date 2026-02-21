@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/mrz_utils.dart';
 import '../../../passport_reader/domain/entities/passport_data.dart';
 import '../widgets/info_section_card.dart';
 import '../widgets/passport_header_card.dart';
+import '../widgets/viz_verification_card.dart';
 
 class PassportDetailScreen extends ConsumerStatefulWidget {
   final PassportData passportData;
@@ -18,10 +20,14 @@ class PassportDetailScreen extends ConsumerStatefulWidget {
 class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen> {
   @override
   void dispose() {
-    // Zero out biometric data buffer to prevent memory leaks of PII
+    // Zero out biometric data buffers to prevent memory leaks of PII
     final faceBytes = widget.passportData.faceImageBytes;
     if (faceBytes != null) {
       faceBytes.fillRange(0, faceBytes.length, 0);
+    }
+    final vizFaceBytes = widget.passportData.vizFaceBytes;
+    if (vizFaceBytes != null) {
+      vizFaceBytes.fillRange(0, vizFaceBytes.length, 0);
     }
 
     super.dispose();
@@ -46,6 +52,20 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen> {
 
             // Security badge
             _buildSecurityBadge(context),
+
+            // VIZ verification (if available)
+            if (data.faceComparisonResult != null ||
+                data.vizMrzFieldsMatch != null) ...[
+              const SizedBox(height: 12),
+              VizVerificationCard(
+                faceComparison: data.faceComparisonResult,
+                mrzFieldsMatch: data.vizMrzFieldsMatch,
+                fieldComparison: data.vizMrzFieldComparison,
+                imageQuality: data.vizImageQuality,
+                vizFaceBytes: data.vizFaceBytes,
+                chipFaceBytes: data.faceImageBytes,
+              ),
+            ],
             const SizedBox(height: 12),
 
             // Personal information
@@ -55,7 +75,7 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen> {
               rows: [
                 ('Name', data.fullName),
                 ('Nationality', data.nationality),
-                ('Date of Birth', data.dateOfBirth),
+                ('Date of Birth', MrzUtils.formatDisplayDate(data.dateOfBirth, isDob: true)),
                 ('Sex', data.sex),
               ],
             ),
@@ -68,7 +88,7 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen> {
               rows: [
                 ('Document No.', data.documentNumber),
                 ('Issuing State', data.issuingState),
-                ('Date of Expiry', data.dateOfExpiry),
+                ('Date of Expiry', MrzUtils.formatDisplayDate(data.dateOfExpiry)),
                 ('Document Type', data.documentType),
               ],
             ),

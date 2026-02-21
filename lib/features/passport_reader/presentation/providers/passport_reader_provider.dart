@@ -2,12 +2,14 @@ import 'package:flutter_nfc_kit/flutter_nfc_kit.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
 
+import '../../../../core/services/face_embedding_service.dart';
 import '../../../mrz_input/domain/entities/mrz_data.dart';
 import '../../data/datasources/http_pa_service.dart';
 import '../../data/datasources/pa_service.dart';
 import '../../data/datasources/passport_datasource.dart';
 import '../../data/datasources/passport_datasource_factory.dart';
 import '../../domain/entities/passport_data.dart';
+import '../../domain/usecases/verify_viz.dart';
 
 final _log = Logger('PassportReaderNotifier');
 
@@ -20,6 +22,7 @@ enum ReadingStep {
   readingDg2,
   readingSod,
   verifyingPa,
+  verifyingViz,
   done,
   error,
 }
@@ -61,13 +64,16 @@ class PassportReaderState {
 class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
   final PassportDatasource _datasource;
   final PaService? _paService;
+  final VerifyViz? _verifyViz;
   final bool _checkNfc;
 
   PassportReaderNotifier({
     PassportDatasource? datasource,
     PaService? paService,
+    VerifyViz? verifyViz,
   })  : _datasource = datasource ?? PassportDatasourceFactory.create(),
         _paService = paService,
+        _verifyViz = verifyViz,
         // Only check NFC on Android when using the default datasource.
         _checkNfc = datasource == null && PassportDatasourceFactory.isNfcPlatform,
         super(const PassportReaderState());
@@ -124,6 +130,28 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
           );
         } catch (e) {
           _log.warning('PA verification failed: $e');
+        }
+      }
+
+      // VIZ verification (if VIZ face was captured from camera)
+      if (_verifyViz != null && mrzData.vizCaptureResult != null) {
+        state = state.copyWith(step: ReadingStep.verifyingViz);
+        try {
+          final vizResult = await _verifyViz.execute(
+            vizCapture: mrzData.vizCaptureResult!,
+            chipData: passportData,
+            ocrMrzData: mrzData,
+          );
+          passportData = passportData.copyWith(
+            faceComparisonResult: vizResult.faceComparison,
+            vizMrzFieldsMatch: vizResult.mrzFieldsMatch,
+            vizMrzFieldComparison: vizResult.fieldComparison,
+            vizImageQuality: mrzData.vizCaptureResult!.qualityMetrics,
+            vizFaceBytes: mrzData.vizCaptureResult!.vizFaceImageBytes,
+          );
+        } catch (e) {
+          _log.warning('VIZ verification failed: $e');
+          // VIZ failure is non-fatal
         }
       }
 
@@ -186,8 +214,21 @@ final paServiceProvider = Provider<PaService?>((ref) {
   return HttpPaService(baseUrl: baseUrl);
 });
 
+/// Face embedding service provider (for VIZ face comparison).
+final faceEmbeddingServiceProvider = Provider<FaceEmbeddingService?>((ref) {
+  return TfLiteFaceEmbeddingService();
+});
+
+/// VIZ verification use case provider.
+final verifyVizProvider = Provider<VerifyViz?>((ref) {
+  final embeddingService = ref.watch(faceEmbeddingServiceProvider);
+  if (embeddingService == null) return null;
+  return VerifyViz(embeddingService: embeddingService);
+});
+
 final passportReaderProvider =
     StateNotifierProvider<PassportReaderNotifier, PassportReaderState>((ref) {
   final paService = ref.watch(paServiceProvider);
-  return PassportReaderNotifier(paService: paService);
+  final verifyViz = ref.watch(verifyVizProvider);
+  return PassportReaderNotifier(paService: paService, verifyViz: verifyViz);
 });

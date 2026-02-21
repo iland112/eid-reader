@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-02-21
+Last updated: 2026-02-22
 
 ## Overview
 
@@ -143,9 +143,42 @@ This document tracks what has been implemented and what remains.
 - **Platform directories**: `windows/` and `linux/` created via `flutter create`
 - 3 new tests (PcscService stub)
 
-### Test Suite (v0.2 + v0.3 + v0.4 + v0.5 + v0.7 + v0.8 + v0.9)
+### VIZ Capture + Face Comparison + Hologram Detection (v0.10)
 
-- 203 tests across 19 test files (143 unit + 60 widget)
+- **VIZ (Visual Inspection Zone) capture**: camera captures passport data page, extracts face via ML Kit face detection
+- **On-device face comparison**: TFLite MobileFaceNet (112x112 → 192D embedding) compares VIZ face vs chip DG2 face
+- **Image quality analysis**: Laplacian blur, glare ratio, saturation std dev (hologram rainbow detection), Michelson contrast
+- **MRZ OCR cross-verification**: OCR MRZ fields compared against chip DG1 data
+- **Quality-adjusted thresholds**: poor image quality reduces face match threshold by 0.15
+- **New entities**: `FaceComparisonResult`, `ImageQualityMetrics`, `VizCaptureResult`
+- **New services**: `FaceDetectionService` (ML Kit), `FaceEmbeddingService` (TFLite), `ImageQualityAnalyzer` (pure Dart)
+- **New use cases**: `CaptureVizFace`, `VerifyViz`
+- **New widgets**: `VizVerificationCard`, `FaceComparisonBadge`
+- **Camera screen enhancement**: enlarged overlay (320x200), `takePicture()` still capture, face detection feedback, quality warnings
+- **NFC scan flow**: 5th step "VIZ" added to `ReadingStep` + `ReadingStepIndicator` (conditional on VIZ capture)
+- **Passport detail**: VIZ verification card with side-by-side faces, similarity score, MRZ match status, quality warnings
+- **Security**: embedding vectors zeroed after comparison, full-page image zeroed after face extraction, VIZ face buffer zeroed on dispose
+- **New packages**: `google_mlkit_face_detection: ^0.12.0`, `tflite_flutter: ^0.11.0`
+- **Model**: MobileFaceNet TFLite (~5MB) bundled in `assets/models/`
+- **Platform**: VIZ features Android-only (camera-dependent); Desktop auto-skips (vizCaptureResult always null)
+- 58 new tests (7 new test files)
+
+### MRZ OCR Enhancement + Field Comparison + Date Formatting (v0.11)
+
+- **Full MRZ field parsing**: `MrzData` expanded with optional fields (`surname`, `givenNames`, `nationality`, `sex`, `documentType`, `issuingState`, `mrzLine1`, `mrzLine2`)
+- **ParseMrzFromText**: extracts all fields from both TD3 MRZ lines (Line 1: doc type, issuing state, name; Line 2: nationality, sex)
+- **MRZ preview on camera**: monospace card showing raw MRZ lines + expanded field display (Name, Nationality, Sex)
+- **Field-by-field OCR vs DG1 comparison**: `MrzFieldMatch`/`MrzFieldComparisonResult` entities, per-field check/X icons in `VizVerificationCard`, up to 7 fields compared (doc number, DOB, DOE + surname, givenNames, nationality, sex)
+- **Enhanced OCR correction**: `MrzOcrCorrector` class with position-aware confusion matrix (digit↔alpha), `IcaoCodes` dictionary (~250 ICAO state codes with single-char OCR correction)
+- **Multi-frame consensus**: camera provider requires N matching frames (default 3) before confirming MRZ detection
+- **Face detection improvement**: `minFaceSize` reduced 0.15 → 0.08, constructor parameter injection; `CaptureVizFace` retries with 1.5x contrast-enhanced image on initial failure
+- **Date display formatting**: `MrzUtils.formatDisplayDate()` converts YYMMDD → "DD MMM YYYY"; `isDob` parameter shifts future dates back 100 years; applied to camera screen, passport detail, expiry badge
+- **`cameraMrzData` preservation**: `MrzInputProvider` stores full `MrzData` from camera scan through the pipeline
+- 90 new tests (7 new test files + updates to 8 existing test files)
+
+### Test Suite (v0.2 + v0.3 + v0.4 + v0.5 + v0.7 + v0.8 + v0.9 + v0.10 + v0.11)
+
+- 351 tests across 33 test files (~270 unit + ~81 widget)
 - Manual mock pattern (no mockito codegen due to analyzer incompatibility)
 - Widget tests for all 4 screens (MrzInput, MrzCamera, NfcScan, PassportDetail)
 - See [testing.md](testing.md) for details
@@ -180,6 +213,11 @@ This document tracks what has been implemented and what remains.
 | `@riverpod` Code Generation | Low | Migrate manual `StateNotifier` to `@riverpod` annotations |
 | ~~DG2 JPEG2000 Decoding~~ | ~~Low~~ | DONE (v0.9) — OpenJPEG FFI, JP2/J2K detection, RGBA→PNG |
 | ~~Desktop Support (Windows/Linux)~~ | ~~Low~~ | DONE (v0.9) — `PcscProvider` + `dart_pcsc`, platform-adaptive UI |
+| ~~VIZ Capture + Face Comparison~~ | ~~Medium~~ | DONE (v0.10) — ML Kit face detection, TFLite MobileFaceNet, image quality analysis |
+| ~~MRZ Full Field Parsing + Comparison~~ | ~~Medium~~ | DONE (v0.11) — All MRZ fields parsed, field-by-field OCR↔DG1 comparison |
+| ~~Enhanced OCR Correction~~ | ~~Medium~~ | DONE (v0.11) — MrzOcrCorrector, ICAO codes, multi-frame consensus |
+| ~~Face Detection Improvement~~ | ~~Low~~ | DONE (v0.11) — minFaceSize 0.08, contrast enhancement retry |
+| VIZ threshold tuning | Low | Tune similarity/quality thresholds with real passport data |
 
 ## Commit History
 

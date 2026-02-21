@@ -66,7 +66,7 @@ void main() {
       expect(find.text('Personal Information'), findsOneWidget);
       expect(find.text('JOHN DOE'), findsWidgets); // header card + info section
       expect(find.text('USA'), findsWidgets); // header badge + nationality + issuingState
-      expect(find.text('690806'), findsWidgets); // dateOfBirth in header + info
+      expect(find.text('06 Aug 1969'), findsWidgets); // dateOfBirth formatted
       expect(find.text('M'), findsWidgets); // sex in header + info
     });
 
@@ -78,7 +78,7 @@ void main() {
 
       expect(find.text('Document Details'), findsOneWidget);
       expect(find.text('L898902C'), findsWidgets); // header card + info
-      expect(find.text('940623'), findsWidgets); // expiry in header + info
+      expect(find.text('23 Jun 1994'), findsWidgets); // expiry formatted
       expect(find.text('P'), findsOneWidget);
     });
 

@@ -126,7 +126,11 @@ void main() {
       const line2 = 'L898902C<3UTO6908061F9406236ZE184226B<<<<<14';
       mockService.mockResult('$line1\n$line2');
 
-      final notifier = MrzCameraNotifier(recognitionService: mockService);
+      // Use consensusCount=1 to test single-frame detection
+      final notifier = MrzCameraNotifier(
+        recognitionService: mockService,
+        consensusCount: 1,
+      );
       addTearDown(notifier.dispose);
 
       // Create a minimal InputImage for testing
@@ -155,7 +159,10 @@ void main() {
       const line2 = 'L898902C<3UTO6908061F9406236ZE184226B<<<<<14';
       mockService.mockResult('$line1\n$line2');
 
-      final notifier = MrzCameraNotifier(recognitionService: mockService);
+      final notifier = MrzCameraNotifier(
+        recognitionService: mockService,
+        consensusCount: 1,
+      );
       addTearDown(notifier.dispose);
 
       // First detection
@@ -170,6 +177,62 @@ void main() {
       // Still has the first detection
       expect(notifier.state.detectedMrz, isNotNull);
       expect(notifier.state.detectedMrz!.documentNumber, 'L898902C');
+    });
+
+    test('consensus requires N matching frames', () async {
+      const line1 = 'P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<';
+      const line2 = 'L898902C<3UTO6908061F9406236ZE184226B<<<<<14';
+      mockService.mockResult('$line1\n$line2');
+
+      final notifier = MrzCameraNotifier(
+        recognitionService: mockService,
+        consensusCount: 3,
+      );
+      addTearDown(notifier.dispose);
+
+      final image = InputImage.fromFilePath('/test/dummy.jpg');
+
+      // First frame: no consensus yet
+      await notifier.processImage(image);
+      expect(notifier.state.detectedMrz, isNull);
+
+      // Second frame: still no consensus
+      await notifier.processImage(image);
+      expect(notifier.state.detectedMrz, isNull);
+
+      // Third frame: consensus reached
+      await notifier.processImage(image);
+      expect(notifier.state.detectedMrz, isNotNull);
+      expect(notifier.state.detectedMrz!.documentNumber, 'L898902C');
+    });
+
+    test('reset clears consensus candidates', () async {
+      const line1 = 'P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<';
+      const line2 = 'L898902C<3UTO6908061F9406236ZE184226B<<<<<14';
+      mockService.mockResult('$line1\n$line2');
+
+      final notifier = MrzCameraNotifier(
+        recognitionService: mockService,
+        consensusCount: 3,
+      );
+      addTearDown(notifier.dispose);
+
+      final image = InputImage.fromFilePath('/test/dummy.jpg');
+
+      // Two frames, then reset
+      await notifier.processImage(image);
+      await notifier.processImage(image);
+      notifier.reset();
+
+      // Need 3 more frames after reset
+      await notifier.processImage(image);
+      expect(notifier.state.detectedMrz, isNull);
+
+      await notifier.processImage(image);
+      expect(notifier.state.detectedMrz, isNull);
+
+      await notifier.processImage(image);
+      expect(notifier.state.detectedMrz, isNotNull);
     });
   });
 }
