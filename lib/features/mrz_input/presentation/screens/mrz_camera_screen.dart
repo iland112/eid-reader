@@ -19,6 +19,8 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
   bool _isInitialized = false;
   String? _initError;
   bool _isStreamActive = false;
+  bool _isProcessingFrame = false;
+  DateTime _lastProcessed = DateTime(2000);
 
   @override
   void initState() {
@@ -56,7 +58,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
 
       _cameraController = CameraController(
         backCamera,
-        ResolutionPreset.medium,
+        ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.nv21,
       );
@@ -83,13 +85,25 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
   }
 
   Future<void> _processFrame(CameraImage image) async {
-    final notifier = ref.read(mrzCameraProvider.notifier);
+    // Throttle: process at most one frame every 500ms
+    if (_isProcessingFrame) return;
+    final now = DateTime.now();
+    if (now.difference(_lastProcessed).inMilliseconds < 500) return;
 
-    // Build InputImage from camera frame
-    final inputImage = _buildInputImage(image);
-    if (inputImage == null) return;
+    _isProcessingFrame = true;
+    _lastProcessed = now;
 
-    await notifier.processImage(inputImage);
+    try {
+      final notifier = ref.read(mrzCameraProvider.notifier);
+
+      // Build InputImage from camera frame
+      final inputImage = _buildInputImage(image);
+      if (inputImage == null) return;
+
+      await notifier.processImage(inputImage);
+    } finally {
+      _isProcessingFrame = false;
+    }
   }
 
   InputImage? _buildInputImage(CameraImage image) {

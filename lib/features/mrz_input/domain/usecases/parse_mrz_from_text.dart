@@ -31,19 +31,47 @@ class ParseMrzFromText {
 
     final rawLines = normalized.split(RegExp(r'[\n\r]+'));
 
-    // Find consecutive lines matching MRZ pattern
-    for (int i = 0; i < rawLines.length - 1; i++) {
-      final candidate1 = _cleanLine(rawLines[i]);
-      final candidate2 = _cleanLine(rawLines[i + 1]);
-
-      if (candidate1.length == 44 &&
-          candidate2.length == 44 &&
-          _line1Pattern.hasMatch(candidate1) &&
-          _mrzLinePattern.hasMatch(candidate2)) {
-        return (candidate1, candidate2);
+    // Clean all lines and filter candidates (length 42-46 to allow OCR variance)
+    final candidates = <String>[];
+    for (final raw in rawLines) {
+      final cleaned = _cleanLine(raw);
+      if (cleaned.length >= 42 && cleaned.length <= 46) {
+        candidates.add(cleaned);
       }
     }
 
+    // Try consecutive candidates (may skip blank lines from OCR)
+    for (int i = 0; i < candidates.length - 1; i++) {
+      // Trim or pad to exactly 44 characters
+      final c1 = _normalizeLength(candidates[i]);
+      final c2 = _normalizeLength(candidates[i + 1]);
+
+      if (c1 == null || c2 == null) continue;
+
+      // Apply OCR error correction on line 2 (digit/alpha context)
+      final c2Corrected = _correctOcrErrors(c2);
+
+      if (_line1Pattern.hasMatch(c1) &&
+          _mrzLinePattern.hasMatch(c2Corrected)) {
+        return (c1, c2Corrected);
+      }
+    }
+
+    return null;
+  }
+
+  /// Normalize a candidate line to exactly 44 characters.
+  /// Trims trailing noise or returns null if too far off.
+  String? _normalizeLength(String line) {
+    if (line.length == 44) return line;
+    if (line.length > 44 && line.length <= 46) {
+      // Try trimming trailing characters (OCR noise)
+      return line.substring(0, 44);
+    }
+    if (line.length >= 42 && line.length < 44) {
+      // Too short, pad with fillers (some OCR drops trailing <)
+      return line.padRight(44, '<');
+    }
     return null;
   }
 
@@ -53,6 +81,54 @@ class ParseMrzFromText {
     return line
         .replaceAll(RegExp(r'\s+'), '')
         .replaceAll('«', '<');
+  }
+
+  /// Applies common OCR character corrections for MRZ text.
+  /// MRZ uses OCR-B font; ML Kit often misreads these characters.
+  String _correctOcrErrors(String line) {
+    final buffer = StringBuffer();
+    for (int i = 0; i < line.length; i++) {
+      var c = line[i];
+      // Common OCR-B misreads
+      if (c == 'O' && _isDigitContext(line, i)) c = '0';
+      if (c == 'Q' && _isDigitContext(line, i)) c = '0';
+      if (c == 'I' && _isDigitContext(line, i)) c = '1';
+      if (c == 'l' || c == 'L' && _isDigitContext(line, i)) {
+        c = '1';
+      }
+      if (c == 'S' && _isDigitContext(line, i)) c = '5';
+      if (c == 'Z' && _isDigitContext(line, i)) c = '2';
+      if (c == 'B' && _isDigitContext(line, i)) c = '8';
+      if (c == 'G' && _isDigitContext(line, i)) c = '6';
+      if (c == 'D' && _isDigitContext(line, i)) c = '0';
+      // Reverse: digit in alpha context
+      if (c == '0' && _isAlphaContext(line, i)) c = 'O';
+      if (c == '1' && _isAlphaContext(line, i)) c = 'I';
+      if (c == '8' && _isAlphaContext(line, i)) c = 'B';
+      buffer.write(c);
+    }
+    return buffer.toString();
+  }
+
+  /// Returns true if position i in MRZ line 2 is expected to be a digit.
+  /// TD3 Line 2: positions 9, 13-19, 21-27, 43 are digits/check digits.
+  bool _isDigitContext(String line, int i) {
+    if (line.length != 44) return false;
+    // Check digit positions
+    if (i == 9 || i == 19 || i == 27 || i == 43) return true;
+    // Date of birth (13-18) and date of expiry (21-26)
+    if (i >= 13 && i <= 18) return true;
+    if (i >= 21 && i <= 26) return true;
+    return false;
+  }
+
+  /// Returns true if position i in MRZ line 1 is expected to be alpha.
+  /// TD3 Line 1: all positions are alpha or filler (<).
+  bool _isAlphaContext(String line, int i) {
+    if (line.length != 44) return false;
+    // Nationality (10-12) is always alpha
+    if (i >= 10 && i <= 12) return true;
+    return false;
   }
 
   /// Extracts MRZ fields from line 2 of TD3 format.
