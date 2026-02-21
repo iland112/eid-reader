@@ -1,0 +1,3 @@
+[submodule "native/openjpeg/openjpeg"]
+	path = native/openjpeg/openjpeg
+	url = https://github.com/uclouvain/openjpeg.git

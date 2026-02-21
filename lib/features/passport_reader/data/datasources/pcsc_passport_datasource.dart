@@ -3,13 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 
 import '../../../../core/image/image_utils.dart';
-import '../../../../core/platform/fast_nfc_provider.dart';
+import '../../../../core/platform/pcsc_provider.dart';
 import '../../../mrz_input/domain/entities/mrz_data.dart';
 import '../../domain/entities/passport_data.dart';
 import 'passport_datasource.dart';
 import 'passport_read_result.dart';
 
-final _log = Logger('NfcPassportDatasource');
+final _log = Logger('PcscPassportDatasource');
 
 String _formatYYMMDD(DateTime date) {
   final y = (date.year % 100).toString().padLeft(2, '0');
@@ -18,82 +18,38 @@ String _formatYYMMDD(DateTime date) {
   return '$y$m$d';
 }
 
-/// Parses YYMMDD string to DateTime.
 DateTime _parseYYMMDD(String yymmdd) {
   final yy = int.parse(yymmdd.substring(0, 2));
   final mm = int.parse(yymmdd.substring(2, 4));
   final dd = int.parse(yymmdd.substring(4, 6));
-  // ICAO 9303: years 00-99 map to 2000-2099 for expiry, 1900-1999 for birth.
-  // For DBAKey, the library handles the century internally.
   final year = yy < 70 ? 2000 + yy : 1900 + yy;
   return DateTime(year, mm, dd);
 }
 
-/// Reads e-Passport data via NFC using the dmrtd library.
-class NfcPassportDatasource implements PassportDatasource {
-  final FastNfcProvider _nfc = FastNfcProvider();
+/// Reads e-Passport data via PC/SC USB smart card reader.
+///
+/// Uses the same dmrtd Passport API as [NfcPassportDatasource] but with
+/// [PcscProvider] instead of [FastNfcProvider].
+class PcscPassportDatasource implements PassportDatasource {
+  final String? preferredReader;
 
-  static const int _maxRetries = 3;
+  PcscPassportDatasource({this.preferredReader});
 
-  /// Reads passport data using NFC.
-  ///
-  /// Uses BAC authentication. Retries automatically on NFC communication
-  /// errors (TagLost, CommunicationError, Polling timeout) up to
-  /// [_maxRetries] times.
   @override
   Future<PassportReadResult> readPassport(MrzData mrzData) async {
-    Object? lastError;
-
-    for (var attempt = 1; attempt <= _maxRetries; attempt++) {
-      try {
-        final result = await _readPassportOnce(mrzData);
-        return result;
-      } catch (e) {
-        lastError = e;
-        final msg = e.toString();
-        final isRetryable = msg.contains('CommunicationError') ||
-            msg.contains('TagLost') ||
-            msg.contains('tag was lost') ||
-            msg.contains('Polling tag timeout');
-
-        _log.warning('Attempt $attempt/$_maxRetries failed: $e');
-        try {
-          await _nfc.disconnect(iosErrorMessage: 'Reading failed');
-        } catch (_) {}
-
-        if (!isRetryable || attempt == _maxRetries) {
-          rethrow;
-        }
-
-        _log.info('Retrying NFC read (attempt ${attempt + 1}/$_maxRetries)...');
-        // Brief pause before retry to let NFC reset
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-      }
-    }
-
-    // Should not reach here, but just in case
-    throw lastError!;
-  }
-
-  Future<PassportReadResult> _readPassportOnce(MrzData mrzData) async {
     String authProtocol = 'BAC';
     final timings = <String, int>{};
+    final pcsc = PcscProvider(preferredReader: preferredReader);
 
     try {
       var sw = Stopwatch()..start();
 
-      _log.info('Connecting to NFC...');
-      await _nfc.connect(
-        timeout: const Duration(seconds: 30),
-        iosAlertMessage: 'Hold your phone near the passport',
-      );
+      _log.info('Connecting to smart card reader...');
+      await pcsc.connect(timeout: const Duration(seconds: 30));
       timings['connect'] = sw.elapsedMilliseconds;
-      _log.info('NFC connected in ${sw.elapsedMilliseconds}ms');
+      _log.info('Connected in ${sw.elapsedMilliseconds}ms');
 
-      // Haptic feedback so user knows the tag was detected
-      HapticFeedback.heavyImpact();
-
-      final passport = Passport(_nfc);
+      final passport = Passport(pcsc);
 
       final dbaKey = DBAKey(
         mrzData.documentNumber,
@@ -101,7 +57,7 @@ class NfcPassportDatasource implements PassportDatasource {
         _parseYYMMDD(mrzData.dateOfExpiry),
       );
 
-      // Authenticate: BAC directly (faster for passports without PACE)
+      // Authenticate: BAC
       sw = Stopwatch()..start();
       _log.info('Starting BAC authentication...');
       await passport.startSession(dbaKey);
@@ -109,7 +65,7 @@ class NfcPassportDatasource implements PassportDatasource {
       timings['auth'] = sw.elapsedMilliseconds;
       _log.info('BAC auth in ${sw.elapsedMilliseconds}ms');
 
-      // Read DG1 (MRZ data)
+      // Read DG1
       sw = Stopwatch()..start();
       _log.info('Reading DG1...');
       final dg1 = await passport.readEfDG1();
@@ -117,7 +73,7 @@ class NfcPassportDatasource implements PassportDatasource {
       timings['dg1'] = sw.elapsedMilliseconds;
       _log.info('DG1 read in ${sw.elapsedMilliseconds}ms (${dg1Bytes.length} bytes)');
 
-      // Read DG2 (face image) if available
+      // Read DG2
       sw = Stopwatch()..start();
       _log.info('Reading DG2...');
       Uint8List? faceImageBytes;
@@ -125,7 +81,6 @@ class NfcPassportDatasource implements PassportDatasource {
       try {
         final dg2 = await passport.readEfDG2();
         dg2Bytes = dg2.toBytes();
-        // Decode face image (handles JPEG passthrough + JPEG2000 conversion)
         faceImageBytes = decodeFaceImage(dg2.imageData!);
         timings['dg2'] = sw.elapsedMilliseconds;
         _log.info('DG2 read in ${sw.elapsedMilliseconds}ms (${dg2Bytes.length} bytes)');
@@ -134,7 +89,7 @@ class NfcPassportDatasource implements PassportDatasource {
         _log.warning('DG2 failed after ${sw.elapsedMilliseconds}ms: $e');
       }
 
-      // Read SOD (Security Object Document) for Passive Authentication
+      // Read SOD
       sw = Stopwatch()..start();
       _log.info('Reading SOD...');
       Uint8List sodBytes = Uint8List(0);
@@ -149,14 +104,11 @@ class NfcPassportDatasource implements PassportDatasource {
       }
 
       // Disconnect
-      await _nfc.disconnect(
-        iosAlertMessage: 'Reading complete',
-      );
+      await pcsc.disconnect();
 
       final total = timings.values.fold<int>(0, (a, b) => a + b);
-      _log.info('Total NFC read: ${total}ms | $timings');
+      _log.info('Total PC/SC read: ${total}ms | $timings');
 
-      // Parse MRZ from DG1
       final mrz = dg1.mrz;
 
       return PassportReadResult(
@@ -181,7 +133,7 @@ class NfcPassportDatasource implements PassportDatasource {
     } catch (e) {
       _log.severe('Passport reading failed: $e | timings so far: $timings');
       try {
-        await _nfc.disconnect(iosErrorMessage: 'Reading failed');
+        await pcsc.disconnect();
       } catch (_) {}
       rethrow;
     }

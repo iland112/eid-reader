@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +18,8 @@ class MrzInputScreen extends ConsumerStatefulWidget {
 }
 
 class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
+  static final bool _isDesktop =
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
   final _formKey = GlobalKey<FormState>();
   final _docNumberController = TextEditingController();
   final _dobController = TextEditingController();
@@ -44,7 +48,7 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final mrzData = ref.read(mrzInputProvider).toMrzData();
-    context.pushNamed('nfc-scan', extra: mrzData);
+    context.pushNamed('scan', extra: mrzData);
   }
 
   @override
@@ -104,8 +108,11 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Enter the three data fields from your passport\'s '
-                        'machine-readable zone, or scan them with your camera.',
+                        _isDesktop
+                            ? 'Enter the three data fields from your passport\'s '
+                              'machine-readable zone.'
+                            : 'Enter the three data fields from your passport\'s '
+                              'machine-readable zone, or scan them with your camera.',
                         style:
                             Theme.of(context).textTheme.bodyMedium?.copyWith(
                                   color: Theme.of(context)
@@ -188,16 +195,21 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              OutlinedButton.icon(
-                onPressed: _onScanMrz,
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Scan MRZ'),
-              ),
-              const SizedBox(height: 12),
+              // Camera scan only available on mobile (Android/iOS)
+              if (Platform.isAndroid || Platform.isIOS) ...[
+                OutlinedButton.icon(
+                  onPressed: _onScanMrz,
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Scan MRZ'),
+                ),
+                const SizedBox(height: 12),
+              ],
               ElevatedButton.icon(
                 onPressed: _onReadPassport,
-                icon: const Icon(Icons.contactless),
-                label: const Text('Scan Passport'),
+                icon: Icon(_isDesktop ? Icons.usb : Icons.contactless),
+                label: Text(_isDesktop
+                    ? 'Read with Card Reader'
+                    : 'Scan Passport'),
               ),
             ],
           ),

@@ -108,9 +108,44 @@ This document tracks what has been implemented and what remains.
 - Skips platform NFC sound (`androidPlatformSound: false`) — app provides custom haptic feedback
 - Supports ISO 14443A + 14443B for ICAO Doc 9303 compatibility
 
-### Test Suite (v0.2 + v0.3 + v0.4 + v0.5 + v0.7 + v0.8)
+### DG2 JPEG2000 Decoding (v0.9)
 
-- 183 tests across 17 test files (133 unit + 50 widget)
+- **OpenJPEG 2.5.4** C library as git submodule (`native/openjpeg/openjpeg/`)
+- **CMake native build**: compiled for Android (NDK), Linux, and Windows
+- **C wrapper** (`opj_flutter.c`): memory stream decoding in C, exposes `opj_flutter_decode()` / `opj_flutter_free()`
+- **dart:ffi bindings** (`openjpeg_ffi.dart`): loads `libopenjp2.so` / `openjp2.dll`, calls native decoder
+- **RGBA → PNG conversion**: via `image` package (`Image.fromBytes()` → `encodePng()`)
+- **Format detection** (`jpeg2000_detector.dart`): pure Dart magic byte detection
+  - JP2 container: `00 00 00 0C 6A 50 20 20`
+  - J2K codestream: `FF 4F FF 51` (SOC + SIZ)
+  - JPEG: `FF D8 FF`
+- **`decodeFaceImage()`** (`image_utils.dart`): JPEG passthrough, JP2/J2K → OpenJPEG → PNG, unknown → null
+- **Datasource integration**: `nfc_passport_datasource.dart` calls `decodeFaceImage()` after DG2 read
+- **Security**: native buffers zeroed (`memset(0)`) before `free()`; Dart buffers `fillRange(0, length, 0)`
+- 18 new tests (15 detector + 3 image_utils)
+
+### Desktop PC/SC Smart Card Reader Support (v0.9)
+
+- **`dart_pcsc` package** (v2.0.2): Windows/Linux PC/SC API bindings via dart:ffi
+- **`PcscProvider`** (`core/platform/pcsc_provider.dart`): `ComProvider` implementation wrapping `dart_pcsc`
+  - `connect()`: `Context.establish()` → `listReaders()` → `waitForCard()` → `connect(reader)`
+  - `transceive()`: `card.transmit(data)` — ISO 7816 APDU (same as NFC)
+  - `disconnect()`: `card.disconnect()` → `context.release()`
+- **`PcscService`** abstraction: `pcsc_service.dart` (interface) + `pcsc_service_impl.dart` (Desktop) + `pcsc_service_stub.dart` (Android)
+- **`PcscPassportDatasource`**: mirrors `NfcPassportDatasource` pattern using `PcscProvider`
+- **`PassportDatasourceFactory`**: platform factory — NFC on Android/iOS, PC/SC on Desktop
+- **Desktop UI**:
+  - `PcscScanScreen`: card reader animation, reader dropdown selection, step indicator
+  - `CardReaderAnimation`: animated card reader icon with pulse during active reading
+  - No wakelock/haptic feedback (Desktop-specific)
+- **Platform-adaptive routing**: `/scan` route renders `NfcScanScreen` or `PcscScanScreen`
+- **MRZ Input adaptation**: camera scan hidden on Desktop, button text/icon adapted
+- **Platform directories**: `windows/` and `linux/` created via `flutter create`
+- 3 new tests (PcscService stub)
+
+### Test Suite (v0.2 + v0.3 + v0.4 + v0.5 + v0.7 + v0.8 + v0.9)
+
+- 203 tests across 19 test files (143 unit + 60 widget)
 - Manual mock pattern (no mockito codegen due to analyzer incompatibility)
 - Widget tests for all 4 screens (MrzInput, MrzCamera, NfcScan, PassportDetail)
 - See [testing.md](testing.md) for details
@@ -143,8 +178,8 @@ This document tracks what has been implemented and what remains.
 | Active Authentication | Low | AA protocol (many passports don't support it) |
 | ~~Widget Tests~~ | ~~Medium~~ | DONE (v0.3) — 33 widget tests across 3 screens |
 | `@riverpod` Code Generation | Low | Migrate manual `StateNotifier` to `@riverpod` annotations |
-| DG2 JPEG2000 Decoding | Low | Some passports use JP2 format; needs platform channel fallback |
-| Desktop Support (Windows/Linux) | Low | `PcscProvider`-based USB smart card reader integration |
+| ~~DG2 JPEG2000 Decoding~~ | ~~Low~~ | DONE (v0.9) — OpenJPEG FFI, JP2/J2K detection, RGBA→PNG |
+| ~~Desktop Support (Windows/Linux)~~ | ~~Low~~ | DONE (v0.9) — `PcscProvider` + `dart_pcsc`, platform-adaptive UI |
 
 ## Commit History
 

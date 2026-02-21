@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../features/mrz_input/domain/entities/mrz_data.dart';
 import '../features/mrz_input/presentation/screens/mrz_camera_screen.dart';
 import '../features/mrz_input/presentation/screens/mrz_input_screen.dart';
+import '../features/passport_reader/data/datasources/passport_datasource_factory.dart';
 import '../features/passport_reader/domain/entities/passport_data.dart';
 import '../features/passport_reader/presentation/screens/nfc_scan_screen.dart';
+import '../features/passport_reader/presentation/screens/pcsc_scan_screen.dart';
 import '../features/passport_display/presentation/screens/passport_detail_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -24,13 +26,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const MrzCameraScreen(),
       ),
       GoRoute(
-        path: '/nfc-scan',
-        name: 'nfc-scan',
+        path: '/scan',
+        name: 'scan',
         pageBuilder: (context, state) {
           final mrzData = state.extra as MrzData;
+
+          // Platform-adaptive scan screen
+          final scanScreen = PassportDatasourceFactory.isNfcPlatform
+              ? NfcScanScreen(mrzData: mrzData)
+              : PcscScanScreen(mrzData: mrzData);
+
           return CustomTransitionPage(
             key: state.pageKey,
-            child: NfcScanScreen(mrzData: mrzData),
+            child: scanScreen,
             transitionsBuilder:
                 (context, animation, secondaryAnimation, child) {
               final slideTween = Tween(

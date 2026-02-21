@@ -63,6 +63,16 @@ void dispose() {
 This prevents residual biometric data from remaining in memory after the user
 navigates away from the screen.
 
+### Native Buffer Security (OpenJPEG JPEG2000 Decoding)
+
+When decoding DG2 face images from JPEG2000 format, biometric data passes through
+native (C) memory buffers. These are secured at multiple layers:
+
+1. **C wrapper (`opj_flutter.c`)**: `opj_flutter_free()` calls `memset(buf, 0, size)` before `free(buf)`
+2. **Dart FFI layer (`openjpeg_ffi.dart`)**: input buffer zeroed via `nativeData.asTypedList(length).fillRange(0, length, 0)` before `calloc.free()`
+3. **No disk I/O**: all decoding uses in-memory streams (`opj_stream_create()` with custom read callbacks), never writes temporary files
+4. **No PII logging**: decoded image dimensions logged for debug, but never image data content
+
 ### NFC Authentication Security
 
 The passport reading flow uses ICAO 9303 compliant authentication:
@@ -98,3 +108,5 @@ Security features are tested in:
 - `test/core/platform/secure_screen_service_test.dart` - MethodChannel mock verification
 - `test/features/passport_reader/presentation/providers/passport_reader_provider_test.dart` - Error state handling, PA verification flow
 - `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` - Buffer zeroing on dispose
+- `test/core/image/jpeg2000_detector_test.dart` - JP2/J2K/JPEG format detection (15 tests)
+- `test/core/image/image_utils_test.dart` - Face image decode routing (3 tests)

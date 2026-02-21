@@ -4,9 +4,9 @@ import 'package:logging/logging.dart';
 
 import '../../../mrz_input/domain/entities/mrz_data.dart';
 import '../../data/datasources/http_pa_service.dart';
-import '../../data/datasources/nfc_passport_datasource.dart';
 import '../../data/datasources/pa_service.dart';
 import '../../data/datasources/passport_datasource.dart';
+import '../../data/datasources/passport_datasource_factory.dart';
 import '../../domain/entities/passport_data.dart';
 
 final _log = Logger('PassportReaderNotifier');
@@ -66,11 +66,10 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
   PassportReaderNotifier({
     PassportDatasource? datasource,
     PaService? paService,
-  })  : _datasource = datasource ?? NfcPassportDatasource(),
+  })  : _datasource = datasource ?? PassportDatasourceFactory.create(),
         _paService = paService,
-        // Only check NFC availability when using the real NFC datasource.
-        // When a custom datasource is injected (e.g. for testing), skip the check.
-        _checkNfc = datasource == null,
+        // Only check NFC on Android when using the default datasource.
+        _checkNfc = datasource == null && PassportDatasourceFactory.isNfcPlatform,
         super(const PassportReaderState());
 
   Future<void> readPassport(MrzData mrzData) async {

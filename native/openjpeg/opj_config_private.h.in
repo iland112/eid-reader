@@ -1,0 +1,17 @@
+/* OpenJPEG config (generated for Flutter build) */
+
+#define OPJ_PACKAGE_VERSION "2.5.4"
+
+#define _LARGEFILE_SOURCE
+#define _FILE_OFFSET_BITS 64
+#define OPJ_HAVE_FSEEKO
+
+/* Memory alignment */
+#define OPJ_HAVE_MALLOC_H
+#define OPJ_HAVE_POSIX_MEMALIGN
+
+#if !defined(_POSIX_C_SOURCE)
+#if defined(OPJ_HAVE_FSEEKO) || defined(OPJ_HAVE_POSIX_MEMALIGN)
+#define _POSIX_C_SOURCE 200112L
+#endif
+#endif

@@ -2,8 +2,8 @@
 
 ## Overview
 
-- **Total tests**: 171
-- **Test files**: 16 (12 unit + 4 widget)
+- **Total tests**: 203
+- **Test files**: 19 (15 unit + 4 widget)
 - **Framework**: `flutter_test`
 - **Mock strategy**: Manual mocks (no mockito codegen)
 - **CI command**: `flutter test`
@@ -44,6 +44,36 @@ Tests `SecureScreenServiceImpl` via MethodChannel mock.
 | enableSecureMode | Invokes `enableSecureMode` method on channel |
 | disableSecureMode | Invokes `disableSecureMode` method on channel |
 | Channel name | Verifies `com.smartcoreinc.eid_reader/secure_screen` |
+
+#### `test/core/image/jpeg2000_detector_test.dart` (15 tests)
+
+Tests JP2/J2K/JPEG magic byte detection.
+
+| Group | Tests |
+|---|---|
+| detectImageFormat | JPEG SOI, JPEG Exif, JP2 container, J2K codestream, empty, short, PNG, random |
+| isJpeg | true for JPEG, false for JP2, false for unknown |
+| isJpeg2000 | true for JP2 container, true for J2K codestream, false for JPEG, false for unknown |
+
+#### `test/core/image/image_utils_test.dart` (3 tests)
+
+Tests face image decode routing.
+
+| Test | Description |
+|---|---|
+| JPEG passthrough | Returns JPEG data unchanged |
+| Unknown format | Returns null for unrecognized format |
+| Empty data | Returns null for empty input |
+
+#### `test/core/platform/pcsc_service_stub_test.dart` (3 tests)
+
+Tests the Android stub implementation of PcscService.
+
+| Test | Description |
+|---|---|
+| checkAvailability | Returns `PcscStatus.notSupported` |
+| listReaders | Returns empty list |
+| Multiple calls | Consistent results across repeated calls |
 
 ### Feature: MRZ Input
 
@@ -188,12 +218,12 @@ Tests MRZ camera scanning state management with mock `TextRecognitionService`.
 | App bar title | Renders 'eID Reader' |
 | Headline text | Renders 'Enter Passport MRZ Data' |
 | Three text fields | Document Number, Date of Birth, Date of Expiry |
-| Scan Passport button | Button with contactless icon |
+| Platform scan button | Desktop: 'Read with Card Reader' + USB icon; Mobile: 'Scan Passport' + NFC icon |
 | Validation errors | Shows required field errors on empty submit |
 | Date format error | Shows 'Format: YYMMDD' for partial input |
-| Navigation | Navigates to `/nfc-scan` with valid MrzData |
-| Scan MRZ button | Renders 'Scan MRZ' button with camera icon |
-| Camera navigation | Navigates to `/mrz-camera` on Scan MRZ tap |
+| Navigation | Navigates to `/scan` with valid MrzData |
+| Platform-appropriate button | Desktop: no camera scan; Mobile: NFC + camera scan buttons |
+| Credit card icon | Renders instruction card icon |
 | Field hints | Renders hint texts (e.g. 'e.g. M12345678') |
 
 ### Widget: MRZ Camera Screen

@@ -1,9 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:eid_reader/features/mrz_input/presentation/screens/mrz_input_screen.dart';
+
+final bool _isDesktop =
+    Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
 /// Builds a testable widget with ProviderScope and GoRouter.
 Widget _buildTestApp({
@@ -26,10 +31,10 @@ Widget _buildTestApp({
                 const Scaffold(body: Text('MRZ Camera')),
           ),
           GoRoute(
-            path: '/nfc-scan',
-            name: 'nfc-scan',
+            path: '/scan',
+            name: 'scan',
             builder: (context, state) =>
-                const Scaffold(body: Text('NFC Scan')),
+                const Scaffold(body: Text('Scan')),
           ),
         ],
       );
@@ -67,12 +72,18 @@ void main() {
       expect(find.text('Date of Expiry'), findsOneWidget);
     });
 
-    testWidgets('renders Scan Passport button', (tester) async {
+    testWidgets('renders scan button with platform-appropriate label',
+        (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      expect(find.text('Scan Passport'), findsOneWidget);
-      expect(find.byIcon(Icons.contactless), findsOneWidget);
+      if (_isDesktop) {
+        expect(find.text('Read with Card Reader'), findsOneWidget);
+        expect(find.byIcon(Icons.usb), findsOneWidget);
+      } else {
+        expect(find.text('Scan Passport'), findsOneWidget);
+        expect(find.byIcon(Icons.contactless), findsOneWidget);
+      }
     });
 
     testWidgets('shows validation errors when submitting empty form',
@@ -80,10 +91,12 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Scroll to and tap Scan Passport with empty fields
-      await tester.ensureVisible(find.text('Scan Passport'));
+      // Scroll to and tap submit button with empty fields
+      final buttonText =
+          _isDesktop ? 'Read with Card Reader' : 'Scan Passport';
+      await tester.ensureVisible(find.text(buttonText));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Scan Passport'));
+      await tester.tap(find.text(buttonText));
       await tester.pumpAndSettle();
 
       expect(find.text('Document number is required'), findsOneWidget);
@@ -109,16 +122,18 @@ void main() {
         '940',
       );
 
-      await tester.ensureVisible(find.text('Scan Passport'));
+      final buttonText =
+          _isDesktop ? 'Read with Card Reader' : 'Scan Passport';
+      await tester.ensureVisible(find.text(buttonText));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Scan Passport'));
+      await tester.tap(find.text(buttonText));
       await tester.pumpAndSettle();
 
       // Date fields should show format error
       expect(find.text('Format: YYMMDD (6 digits)'), findsWidgets);
     });
 
-    testWidgets('navigates to nfc-scan with valid input', (tester) async {
+    testWidgets('navigates to scan with valid input', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
@@ -136,33 +151,33 @@ void main() {
         '940623',
       );
 
-      await tester.ensureVisible(find.text('Scan Passport'));
+      // Button text is platform-dependent
+      final buttonText =
+          _isDesktop ? 'Read with Card Reader' : 'Scan Passport';
+      await tester.ensureVisible(find.text(buttonText));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Scan Passport'));
+      await tester.tap(find.text(buttonText));
       await tester.pumpAndSettle();
 
-      // Should navigate to NFC Scan screen
-      expect(find.text('NFC Scan'), findsOneWidget);
+      // Should navigate to scan screen
+      expect(find.text('Scan'), findsOneWidget);
     });
 
-    testWidgets('renders Scan MRZ button', (tester) async {
+    testWidgets('renders platform-appropriate scan button', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      expect(find.text('Scan MRZ'), findsOneWidget);
-      expect(find.byIcon(Icons.camera_alt), findsOneWidget);
-    });
-
-    testWidgets('Scan MRZ button navigates to mrz-camera', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      await tester.ensureVisible(find.text('Scan MRZ'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Scan MRZ'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('MRZ Camera'), findsOneWidget);
+      if (_isDesktop) {
+        // Desktop: 'Read with Card Reader' with USB icon, no camera scan
+        expect(find.text('Read with Card Reader'), findsOneWidget);
+        expect(find.byIcon(Icons.usb), findsOneWidget);
+        expect(find.text('Scan MRZ'), findsNothing);
+      } else {
+        // Mobile: 'Scan Passport' with NFC icon + 'Scan MRZ' camera button
+        expect(find.text('Scan Passport'), findsOneWidget);
+        expect(find.byIcon(Icons.contactless), findsOneWidget);
+        expect(find.text('Scan MRZ'), findsOneWidget);
+      }
     });
 
     testWidgets('renders credit card icon', (tester) async {
