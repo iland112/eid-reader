@@ -2,6 +2,7 @@ import 'package:dmrtd/dmrtd.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 
+import '../../../../core/platform/fast_nfc_provider.dart';
 import '../../../mrz_input/domain/entities/mrz_data.dart';
 import '../../domain/entities/passport_data.dart';
 import 'passport_datasource.dart';
@@ -29,7 +30,7 @@ DateTime _parseYYMMDD(String yymmdd) {
 
 /// Reads e-Passport data via NFC using the dmrtd library.
 class NfcPassportDatasource implements PassportDatasource {
-  final NfcProvider _nfc = NfcProvider();
+  final FastNfcProvider _nfc = FastNfcProvider();
 
   static const int _maxRetries = 3;
 
