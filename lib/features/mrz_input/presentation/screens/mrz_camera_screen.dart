@@ -2,6 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../domain/entities/mrz_data.dart';
 import '../providers/mrz_camera_provider.dart';
@@ -27,6 +28,20 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
 
   Future<void> _initCamera() async {
     try {
+      // Request camera permission at runtime
+      final status = await Permission.camera.request();
+      if (!mounted) return;
+      if (status.isDenied) {
+        setState(
+            () => _initError = 'Camera permission denied. Please allow camera access to scan MRZ.');
+        return;
+      }
+      if (status.isPermanentlyDenied) {
+        setState(() =>
+            _initError = 'Camera permission permanently denied. Please enable it in Settings.');
+        return;
+      }
+
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
         setState(() => _initError = 'No cameras available');
@@ -131,20 +146,31 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
   Widget _buildCameraPreview() {
     if (_initError != null) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.no_photography,
-              size: 64,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _initError!,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.no_photography,
+                size: 64,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _initError!,
+                style: Theme.of(context).textTheme.bodyLarge,
+                textAlign: TextAlign.center,
+              ),
+              if (_initError!.contains('Settings')) ...[
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => openAppSettings(),
+                  child: const Text('Open Settings'),
+                ),
+              ],
+            ],
+          ),
         ),
       );
     }
