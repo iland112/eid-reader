@@ -26,17 +26,43 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/nfc-scan',
         name: 'nfc-scan',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final mrzData = state.extra as MrzData;
-          return NfcScanScreen(mrzData: mrzData);
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: NfcScanScreen(mrzData: mrzData),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+              final slideTween = Tween(
+                begin: const Offset(0, 0.08),
+                end: Offset.zero,
+              ).chain(CurveTween(curve: Curves.easeOut));
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: animation.drive(slideTween),
+                  child: child,
+                ),
+              );
+            },
+            transitionDuration: const Duration(milliseconds: 300),
+          );
         },
       ),
       GoRoute(
         path: '/passport-detail',
         name: 'passport-detail',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final passportData = state.extra as PassportData;
-          return PassportDetailScreen(passportData: passportData);
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: PassportDetailScreen(passportData: passportData),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 400),
+          );
         },
       ),
     ],

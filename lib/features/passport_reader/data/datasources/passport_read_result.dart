@@ -9,10 +9,14 @@ class PassportReadResult {
   final Uint8List dg1Bytes;
   final Uint8List dg2Bytes;
 
+  /// Per-step timing in milliseconds (for diagnostics).
+  final Map<String, int> stepTimings;
+
   const PassportReadResult({
     required this.passportData,
     required this.sodBytes,
     required this.dg1Bytes,
     required this.dg2Bytes,
+    this.stepTimings = const {},
   });
 }

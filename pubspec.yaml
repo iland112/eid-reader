@@ -37,6 +37,9 @@ dependencies:
   # HTTP client
   http: ^1.2.0
 
+  # Screen wakelock (keep screen on during NFC reading)
+  wakelock_plus: ^1.2.8
+
   # Utilities
   equatable: ^2.0.7
   intl: ^0.19.0

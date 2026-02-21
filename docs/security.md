@@ -6,16 +6,18 @@ eID Reader handles personal identity data (PII) including names, document number
 dates, nationality, and biometric face images. The following security principles apply:
 
 1. **Memory-only data** - Passport data is never persisted to disk or database
-2. **No network transmission** - v1 is fully offline; no data leaves the device
+2. **Minimal network transmission** - Only SOD/DG bytes sent to PA Service API for verification; no PII sent
 3. **No PII logging** - Never log names, document numbers, dates, or biometric data
-4. **Screen capture prevention** - FLAG_SECURE on sensitive screens
+4. **Screen capture prevention** - FLAG_SECURE infrastructure available (currently disabled per user preference)
 5. **Biometric buffer clearing** - Zero out `Uint8List` buffers on navigation away
 
 ## Implemented Measures
 
 ### FLAG_SECURE (Android Screen Capture Prevention)
 
-Prevents screenshots and screen recording on the passport detail screen.
+Infrastructure to prevent screenshots and screen recording on the passport detail screen.
+**Currently disabled** (v0.7) — `SecureScreenService` is not invoked from `PassportDetailScreen`.
+Can be re-enabled by importing and calling the service in `initState()`/`dispose()`.
 
 **Architecture:**
 
@@ -39,10 +41,6 @@ WindowManager.LayoutParams.FLAG_SECURE
 - `lib/core/platform/secure_screen_service.dart` - Abstract interface + MethodChannel impl
 - `android/app/src/main/kotlin/com/smartcoreinc/eid_reader/MainActivity.kt` - Native handler
 
-**Lifecycle:**
-- `initState()` -> `enableSecureMode()` (adds FLAG_SECURE)
-- `dispose()` -> `disableSecureMode()` (clears FLAG_SECURE)
-
 **MethodChannel:** `com.smartcoreinc.eid_reader/secure_screen`
 - `enableSecureMode` -> `window.addFlags(FLAG_SECURE)`
 - `disableSecureMode` -> `window.clearFlags(FLAG_SECURE)`
@@ -58,7 +56,6 @@ void dispose() {
   if (faceBytes != null) {
     faceBytes.fillRange(0, faceBytes.length, 0);
   }
-  _secureScreenService.disableSecureMode();
   super.dispose();
 }
 ```
@@ -77,13 +74,21 @@ Both require the MRZ data (document number, date of birth, date of expiry) as
 the shared secret, ensuring only someone with physical access to the passport's
 data page can read the chip.
 
+### Passive Authentication (PA)
+
+Verifies chip data integrity via SOD digital signature chain:
+
+- SOD + DG1/DG2 raw bytes sent to PA Service REST API (`POST /api/pa/verify`)
+- 8-step verification: cert chain, DSC/CSCA validation, CRL check, SOD signature, DG hash
+- PA is optional — graceful degradation if server unavailable or SOD bytes empty
+- Only cryptographic bytes transmitted; no PII (names, dates) leaves the device
+
 ## Not Yet Implemented
 
 | Measure | Description |
 |---|---|
-| Passive Authentication | Verify chip data integrity via EfSOD digital signature (blocked: dmrtd `EfSOD` is a stub) |
 | Active Authentication | Verify chip is genuine, not cloned (low priority, many passports don't support AA) |
-| Certificate pinning | Not needed in v1 (no network calls) |
+| Certificate pinning | Consider for PA Service API communication |
 | Root/jailbreak detection | Consider for future versions |
 | Memory encryption | Dart GC handles deallocation; explicit zeroing is the current mitigation |
 
@@ -91,4 +96,5 @@ data page can read the chip.
 
 Security features are tested in:
 - `test/core/platform/secure_screen_service_test.dart` - MethodChannel mock verification
-- `test/features/passport_reader/presentation/providers/passport_reader_provider_test.dart` - Error state handling
+- `test/features/passport_reader/presentation/providers/passport_reader_provider_test.dart` - Error state handling, PA verification flow
+- `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` - Buffer zeroing on dispose

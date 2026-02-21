@@ -77,6 +77,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 | Permissions | `permission_handler` | Camera, NFC permissions |
 | Equality | `equatable` | Value equality for entities |
 | Logging | `logging` | Structured logging |
+| Wakelock | `wakelock_plus` | Keeps screen on during NFC reading |
 
 ## Code Rules
 
@@ -106,7 +107,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - **NO logging of PII** (names, document numbers, dates, biometric data).
 - **Network transmission**: Only to PA Service API for Passive Authentication verification (SOD + DG bytes). No external servers.
 - **NO secrets in Docker images** (keystores, signing keys).
-- **FLAG_SECURE** (IMPLEMENTED): `SecureScreenService` + `MainActivity.kt` MethodChannel on passport detail screen.
+- **FLAG_SECURE** (AVAILABLE, DISABLED): `SecureScreenService` + `MainActivity.kt` MethodChannel infrastructure exists but is not invoked from `PassportDetailScreen` (disabled in v0.7 per user preference). Re-enable by importing service in screen.
 - **Biometric buffer clearing** (IMPLEMENTED): `Uint8List.fillRange(0, length, 0)` in `PassportDetailScreen.dispose()`.
 - See `docs/security.md` for full security architecture details.
 
@@ -139,7 +140,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - Never expose raw exception messages to users.
 
 ### Testing
-- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **172 tests across 16 files.**
+- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **171 tests across 16 files.**
 - **Manual mock pattern** (no mockito codegen due to analyzer 7.x incompatibility).
 - Use Riverpod `ProviderContainer` overrides for dependency injection in tests.
 - For `MethodChannel` testing, use `TestDefaultBinaryMessengerBinding`.
@@ -166,7 +167,12 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `lib/app/router.dart` - GoRouter route definitions
 - `lib/app/theme.dart` - Material 3 theme configuration
 - `lib/core/platform/nfc_service.dart` - NFC abstraction interface
-- `lib/core/platform/secure_screen_service.dart` - FLAG_SECURE abstraction + MethodChannel impl
+- `lib/core/platform/secure_screen_service.dart` - FLAG_SECURE abstraction + MethodChannel impl (available, not active)
+- `lib/features/passport_reader/presentation/widgets/nfc_pulse_animation.dart` - Animated NFC pulse rings via CustomPainter
+- `lib/features/passport_reader/presentation/widgets/reading_step_indicator.dart` - 4-phase step indicator
+- `lib/features/passport_display/presentation/widgets/passport_header_card.dart` - Passport-style header with Hero photo
+- `lib/features/passport_display/presentation/widgets/info_section_card.dart` - Reusable card with icon, title, rows
+- `lib/features/passport_display/presentation/widgets/expiry_date_badge.dart` - Color-coded expiry status badge
 - `lib/features/passport_reader/data/datasources/passport_datasource.dart` - Abstract datasource interface (returns PassportReadResult)
 - `lib/features/passport_reader/data/datasources/nfc_passport_datasource.dart` - Core dmrtd integration (reads DG1/DG2/SOD)
 - `lib/features/passport_reader/data/datasources/pa_service.dart` - PA verification service interface
@@ -197,7 +203,10 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - **targetSdk**: Flutter default (`flutter.targetSdkVersion`)
 - **Permissions**: `CAMERA`, `NFC`, `INTERNET`
 - **Required hardware**: `android.hardware.nfc` (required=true), `android.hardware.camera` (required=false)
-- **Debug signing**: uses debug keys (release signing TODO)
+- **Kotlin Gradle plugin**: 2.2.0
+- **R8 minify/shrink**: enabled for release builds with `proguard-rules.pro`
+- **Debug signing**: uses debug keys (no Play Store deployment planned)
+- **Release APK**: `flutter build apk --release` → ~89MB
 
 ## Commands
 
@@ -206,6 +215,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 flutter pub get                    # Install dependencies
 flutter run                        # Run on connected device
 flutter build apk --debug         # Build debug APK
+flutter build apk --release       # Build release APK (R8 minified, ~89MB)
 
 # Code generation (after adding @riverpod annotations)
 dart run build_runner build --delete-conflicting-outputs

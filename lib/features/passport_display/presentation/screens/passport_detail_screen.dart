@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/platform/secure_screen_service.dart';
 import '../../../passport_reader/domain/entities/passport_data.dart';
+import '../widgets/info_section_card.dart';
+import '../widgets/passport_header_card.dart';
 
 class PassportDetailScreen extends ConsumerStatefulWidget {
   final PassportData passportData;
@@ -15,17 +16,6 @@ class PassportDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen> {
-  late final SecureScreenService _secureScreenService;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _secureScreenService = ref.read(secureScreenServiceProvider);
-      _secureScreenService.enableSecureMode();
-    });
-  }
-
   @override
   void dispose() {
     // Zero out biometric data buffer to prevent memory leaks of PII
@@ -34,152 +24,228 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen> {
       faceBytes.fillRange(0, faceBytes.length, 0);
     }
 
-    // Disable secure screen mode
-    _secureScreenService.disableSecureMode();
-
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final data = widget.passportData;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Passport Details'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Face image
-            Center(
-              child: Container(
-                width: 120,
-                height: 160,
-                decoration: BoxDecoration(
-                  color:
-                      Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
-                ),
-                child: widget.passportData.faceImageBytes != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.memory(
-                          widget.passportData.faceImageBytes!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(Icons.person, size: 64),
-                        ),
-                      )
-                    : const Icon(Icons.person, size: 64),
-              ),
-            ),
-            const SizedBox(height: 24),
+            // Passport-style header card
+            PassportHeaderCard(passportData: data),
+            const SizedBox(height: 12),
 
             // Security badge
             _buildSecurityBadge(context),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
 
             // Personal information
-            _buildSectionHeader(context, 'Personal Information'),
-            _buildInfoRow('Name', widget.passportData.fullName),
-            _buildInfoRow('Nationality', widget.passportData.nationality),
-            _buildInfoRow(
-                'Date of Birth', widget.passportData.dateOfBirth),
-            _buildInfoRow('Sex', widget.passportData.sex),
-            const SizedBox(height: 16),
+            InfoSectionCard(
+              title: 'Personal Information',
+              icon: Icons.person,
+              rows: [
+                ('Name', data.fullName),
+                ('Nationality', data.nationality),
+                ('Date of Birth', data.dateOfBirth),
+                ('Sex', data.sex),
+              ],
+            ),
+            const SizedBox(height: 12),
 
             // Document information
-            _buildSectionHeader(context, 'Document Information'),
-            _buildInfoRow(
-                'Document No.', widget.passportData.documentNumber),
-            _buildInfoRow(
-                'Issuing State', widget.passportData.issuingState),
-            _buildInfoRow(
-                'Date of Expiry', widget.passportData.dateOfExpiry),
-            _buildInfoRow(
-                'Document Type', widget.passportData.documentType),
-            const SizedBox(height: 16),
+            InfoSectionCard(
+              title: 'Document Details',
+              icon: Icons.badge,
+              rows: [
+                ('Document No.', data.documentNumber),
+                ('Issuing State', data.issuingState),
+                ('Date of Expiry', data.dateOfExpiry),
+                ('Document Type', data.documentType),
+              ],
+            ),
+            const SizedBox(height: 12),
 
             // Security status
-            _buildSectionHeader(context, 'Security Status'),
-            _buildInfoRow(
-              'Passive Auth',
-              widget.passportData.passiveAuthValid
-                  ? 'Verified'
-                  : 'Not verified',
+            InfoSectionCard(
+              title: 'Security Status',
+              icon: Icons.security,
+              rows: [
+                (
+                  'Passive Auth',
+                  data.passiveAuthValid ? 'Verified' : 'Not verified',
+                ),
+                (
+                  'Active Auth',
+                  data.activeAuthValid == null
+                      ? 'N/A'
+                      : data.activeAuthValid!
+                          ? 'Verified'
+                          : 'Failed',
+                ),
+                ('Protocol', data.authProtocol),
+              ],
             ),
-            _buildInfoRow(
-              'Active Auth',
-              widget.passportData.activeAuthValid == null
-                  ? 'N/A'
-                  : widget.passportData.activeAuthValid!
-                      ? 'Verified'
-                      : 'Failed',
-            ),
-            _buildInfoRow('Protocol', widget.passportData.authProtocol),
 
             // PA Verification Details
-            if (widget.passportData.paVerificationResult != null) ...[
-              const SizedBox(height: 16),
-              _buildSectionHeader(context, 'PA Verification Details'),
-              _buildPaDetails(context),
+            if (data.paVerificationResult != null) ...[
+              const SizedBox(height: 12),
+              _buildPaDetailsCard(context),
             ],
+
+            // Scan Timing Debug
+            if (data.debugTimings.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _buildTimingPanel(),
+            ],
+
+            const SizedBox(height: 24),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPaDetails(BuildContext context) {
+  Widget _buildPaDetailsCard(BuildContext context) {
     final pa = widget.passportData.paVerificationResult!;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildInfoRow(
-          'Certificate Chain',
-          pa.certificateChainValid == true ? 'Valid' : 'Invalid',
+    final rows = <(String, String)>[
+      (
+        'Certificate Chain',
+        pa.certificateChainValid == true ? 'Valid' : 'Invalid',
+      ),
+      if (pa.dscSubject != null) ('DSC Subject', pa.dscSubject!),
+      if (pa.cscaSubject != null) ('CSCA Subject', pa.cscaSubject!),
+      if (pa.crlStatus != null) ('CRL Status', pa.crlStatus!),
+      (
+        'SOD Signature',
+        pa.sodSignatureValid == true ? 'Valid' : 'Invalid',
+      ),
+      if (pa.signatureAlgorithm != null) ('Algorithm', pa.signatureAlgorithm!),
+      if (pa.totalGroups != null)
+        ('Data Groups', '${pa.validGroups ?? 0}/${pa.totalGroups} valid'),
+      if (pa.processingDurationMs != null)
+        ('Verification Time', '${pa.processingDurationMs}ms'),
+      if (pa.errorMessage != null) ('Error', pa.errorMessage!),
+    ];
+
+    return InfoSectionCard(
+      title: 'PA Verification Details',
+      icon: Icons.verified_user,
+      rows: rows,
+    );
+  }
+
+  Widget _buildTimingPanel() {
+    final timings = widget.passportData.debugTimings;
+    final total = timings.values.fold<int>(0, (a, b) => a + b);
+    final labels = {
+      'connect': 'Connect',
+      'auth': 'BAC Auth',
+      'dg1': 'DG1 (MRZ)',
+      'dg2': 'DG2 (Face)',
+      'sod': 'SOD',
+    };
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.black87,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.timer, size: 16, color: Colors.greenAccent),
+                const SizedBox(width: 6),
+                Text(
+                  'Scan Timing',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: Colors.greenAccent,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (final entry in timings.entries)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 1),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 90,
+                      child: Text(
+                        labels[entry.key] ?? entry.key,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                          color: Colors.greenAccent,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${(entry.value / 1000).toStringAsFixed(1)}s',
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const Divider(color: Colors.white24, height: 8),
+            Row(
+              children: [
+                const SizedBox(
+                  width: 90,
+                  child: Text(
+                    'Total',
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      color: Colors.greenAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${(total / 1000).toStringAsFixed(1)}s',
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    color: Colors.yellowAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-        if (pa.dscSubject != null)
-          _buildInfoRow('DSC Subject', pa.dscSubject!),
-        if (pa.cscaSubject != null)
-          _buildInfoRow('CSCA Subject', pa.cscaSubject!),
-        if (pa.crlStatus != null)
-          _buildInfoRow('CRL Status', pa.crlStatus!),
-        _buildInfoRow(
-          'SOD Signature',
-          pa.sodSignatureValid == true ? 'Valid' : 'Invalid',
-        ),
-        if (pa.signatureAlgorithm != null)
-          _buildInfoRow('Algorithm', pa.signatureAlgorithm!),
-        if (pa.totalGroups != null)
-          _buildInfoRow(
-            'Data Groups',
-            '${pa.validGroups ?? 0}/${pa.totalGroups} valid',
-          ),
-        if (pa.processingDurationMs != null)
-          _buildInfoRow(
-            'Verification Time',
-            '${pa.processingDurationMs}ms',
-          ),
-        if (pa.errorMessage != null)
-          _buildInfoRow('Error', pa.errorMessage!),
-      ],
+      ),
     );
   }
 
   Widget _buildSecurityBadge(BuildContext context) {
     final isVerified = widget.passportData.passiveAuthValid;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: isVerified
             ? Colors.green.withValues(alpha: 0.1)
             : Colors.orange.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isVerified ? Colors.green : Colors.orange,
         ),
@@ -197,45 +263,7 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen> {
             style: TextStyle(
               color: isVerified ? Colors.green : Colors.orange,
               fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(BuildContext context, String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.grey,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              fontSize: 15,
             ),
           ),
         ],

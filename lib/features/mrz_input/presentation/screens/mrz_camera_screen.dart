@@ -23,6 +23,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
   bool _isStreamActive = false;
   bool _isProcessingFrame = false;
   DateTime _lastProcessed = DateTime(2000);
+  bool _isTorchOn = false;
 
   @override
   void initState() {
@@ -180,6 +181,21 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
     Navigator.of(context).pop(data);
   }
 
+  Future<void> _toggleTorch() async {
+    if (_cameraController == null) return;
+    try {
+      final newMode = _isTorchOn ? FlashMode.off : FlashMode.torch;
+      await _cameraController!.setFlashMode(newMode);
+      setState(() => _isTorchOn = !_isTorchOn);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Flashlight not available')),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _cameraController?.stopImageStream().catchError((_) {});
@@ -194,6 +210,14 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Scan MRZ'),
+        actions: [
+          if (_isInitialized)
+            IconButton(
+              icon: Icon(_isTorchOn ? Icons.flash_on : Icons.flash_off),
+              tooltip: _isTorchOn ? 'Turn off flashlight' : 'Turn on flashlight',
+              onPressed: _toggleTorch,
+            ),
+        ],
       ),
       body: Column(
         children: [

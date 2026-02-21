@@ -2,7 +2,7 @@
 
 ## Overview
 
-- **Total tests**: 172
+- **Total tests**: 171
 - **Test files**: 16 (12 unit + 4 widget)
 - **Framework**: `flutter_test`
 - **Mock strategy**: Manual mocks (no mockito codegen)
@@ -188,7 +188,7 @@ Tests MRZ camera scanning state management with mock `TextRecognitionService`.
 | App bar title | Renders 'eID Reader' |
 | Headline text | Renders 'Enter Passport MRZ Data' |
 | Three text fields | Document Number, Date of Birth, Date of Expiry |
-| Read Passport button | Button with NFC icon |
+| Scan Passport button | Button with contactless icon |
 | Validation errors | Shows required field errors on empty submit |
 | Date format error | Shows 'Format: YYMMDD' for partial input |
 | Navigation | Navigates to `/nfc-scan` with valid MrzData |
@@ -218,42 +218,42 @@ Tests the MRZ camera scanning UI states using `MrzCameraNotifier` with mock
 #### `test/features/passport_reader/presentation/screens/nfc_scan_screen_test.dart` (11 tests)
 
 Uses GoRouter for named route navigation and `Completer`-based mock for
-blocking "in progress" state tests.
+blocking "in progress" state tests. Updated for v0.7 redesign with pulse
+animation, step indicator, and positioning guide.
 
 | Test | Description |
 |---|---|
-| App bar title | Renders 'Reading Passport' |
-| NFC icon | Shows NFC icon during reading |
-| Progress indicator | Shows `LinearProgressIndicator` during reading |
+| App bar title | Renders 'Scanning Passport' |
+| Contactless icon | Shows contactless icon during reading |
+| Step indicator | Shows Connect, Auth, Read, Verify step labels |
+| Positioning guide | Shows 'Place phone flat on the passport data page' |
 | TagLost error | Error icon + 'Connection lost...' message |
-| Try Again button | Shows retry button on error |
-| No progress on error | Hides progress indicator on error |
+| Retry button | Shows retry button with count on error |
 | Auth error | 'Authentication failed...' message |
 | Timeout error | 'Reading timed out...' message |
 | Generic error | 'Could not read passport...' message |
 | Success navigation | Navigates to `/passport-detail` on success |
-| Retry + navigation | Try Again -> success -> navigates |
+| Retry + navigation | Retry -> success -> navigates |
 
 ### Widget: Passport Detail Screen
 
-#### `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` (18 tests)
+#### `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` (16 tests)
 
-Uses `MockSecureScreenService` to verify FLAG_SECURE calls and
-`Navigator.pushReplacement` to test dispose behavior.
+Uses `Navigator.pushReplacement` to test dispose behavior. Updated for v0.7
+card-based layout with `PassportHeaderCard` + `InfoSectionCard` widgets.
 
 | Test | Description |
 |---|---|
 | App bar title | Renders 'Passport Details' |
-| Personal info | Name, nationality, DOB, sex |
-| Document info | Document number, issuing state, expiry, type |
+| Personal info | Name, nationality, DOB, sex (header card + info section) |
+| Document details | Document number, issuing state, expiry, type |
 | Security status | Passive/active auth, protocol |
 | Pending badge | Orange 'Verification Pending' when not verified |
 | Verified badge | Green 'Document Verified' when verified |
 | Verified data | Shows PACE, 'Verified' for both auth types |
 | Person icon | Fallback icon when no face image |
 | Failed auth | Shows 'Failed' for `activeAuthValid: false` |
-| Secure mode on | Calls `enableSecureMode()` on init |
-| Dispose cleanup | Calls `disableSecureMode()` + zeroes face buffer |
+| Buffer zeroing | Zeroes face bytes on dispose |
 | Section headers | All 3 section headers render |
 | Field labels | All 11 field labels render |
 | No PA details | Hides PA section when no PA result |

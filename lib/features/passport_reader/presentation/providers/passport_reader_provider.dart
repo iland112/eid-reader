@@ -30,11 +30,15 @@ class PassportReaderState {
   final String? errorMessage;
   final String? debugError;
 
+  /// NFC step timings in ms (for diagnostics).
+  final Map<String, int> stepTimings;
+
   const PassportReaderState({
     this.step = ReadingStep.idle,
     this.data,
     this.errorMessage,
     this.debugError,
+    this.stepTimings = const {},
   });
 
   PassportReaderState copyWith({
@@ -42,12 +46,14 @@ class PassportReaderState {
     PassportData? data,
     String? errorMessage,
     String? debugError,
+    Map<String, int>? stepTimings,
   }) {
     return PassportReaderState(
       step: step ?? this.step,
       data: data ?? this.data,
       errorMessage: errorMessage,
       debugError: debugError,
+      stepTimings: stepTimings ?? this.stepTimings,
     );
   }
 }
@@ -92,11 +98,15 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
         }
       }
 
-      state = state.copyWith(step: ReadingStep.authenticating);
+      // Stay on 'connecting' step – the datasource internally handles
+      // NFC polling (connect) + authentication + DG reads.  The UI shows
+      // "Hold your phone against the back of the passport" during this time.
       final readResult = await _datasource.readPassport(mrzData);
 
-      // PA verification (optional - only if PaService is configured)
-      var passportData = readResult.passportData;
+      // Attach timing data to passport data for debug display
+      var passportData = readResult.passportData.copyWith(
+        debugTimings: readResult.stepTimings,
+      );
       if (_paService != null &&
           readResult.sodBytes.isNotEmpty &&
           readResult.dg1Bytes.isNotEmpty) {
@@ -121,6 +131,7 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
       state = PassportReaderState(
         step: ReadingStep.done,
         data: passportData,
+        stepTimings: readResult.stepTimings,
       );
     } catch (e) {
       _log.warning('readPassport error: $e');
@@ -138,21 +149,26 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
 
   String _getErrorMessage(Object error) {
     final message = error.toString();
-    if (message.contains('TagLost') || message.contains('tag was lost')) {
-      return 'Connection lost. Keep your phone still and try again.';
+    if (message.contains('TagLost') ||
+        message.contains('tag was lost') ||
+        message.contains('CommunicationError')) {
+      return 'Connection lost. Keep your phone still against the passport and try again.';
     }
     if (message.contains('SecurityStatusNotSatisfied') ||
         message.contains('authentication')) {
       return 'Authentication failed. Please check your passport details.';
     }
+    if (message.contains('Polling tag timeout') ||
+        message.contains('poll') ||
+        message.contains('Poll')) {
+      return 'Passport not detected. Place your phone flat on the '
+          'passport data page and hold still.';
+    }
     if (message.contains('timeout') || message.contains('Timeout')) {
       return 'Reading timed out. Please try again.';
     }
     if (message.contains('NFC') || message.contains('nfc')) {
-      return 'NFC error. Please make sure NFC is enabled and try again.';
-    }
-    if (message.contains('poll') || message.contains('Poll')) {
-      return 'No passport detected. Hold your phone against the back of the passport.';
+      return 'Scan error. Please make sure NFC is enabled and try again.';
     }
     _log.warning('Unhandled error: $message');
     return 'Could not read passport. Please reposition and try again.';
@@ -161,7 +177,7 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
 
 /// PA Service base URL provider. Override for custom server address.
 final paServiceBaseUrlProvider = Provider<String>((ref) {
-  return 'http://10.0.2.2:8080';
+  return 'http://192.168.1.43:18080';
 });
 
 /// PA Service provider. Returns null if base URL is empty.

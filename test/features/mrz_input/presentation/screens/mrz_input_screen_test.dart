@@ -67,12 +67,12 @@ void main() {
       expect(find.text('Date of Expiry'), findsOneWidget);
     });
 
-    testWidgets('renders Read Passport button', (tester) async {
+    testWidgets('renders Scan Passport button', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      expect(find.text('Read Passport'), findsOneWidget);
-      expect(find.byIcon(Icons.nfc), findsOneWidget);
+      expect(find.text('Scan Passport'), findsOneWidget);
+      expect(find.byIcon(Icons.contactless), findsOneWidget);
     });
 
     testWidgets('shows validation errors when submitting empty form',
@@ -80,8 +80,10 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Tap Read Passport with empty fields
-      await tester.tap(find.text('Read Passport'));
+      // Scroll to and tap Scan Passport with empty fields
+      await tester.ensureVisible(find.text('Scan Passport'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Scan Passport'));
       await tester.pumpAndSettle();
 
       expect(find.text('Document number is required'), findsOneWidget);
@@ -107,7 +109,9 @@ void main() {
         '940',
       );
 
-      await tester.tap(find.text('Read Passport'));
+      await tester.ensureVisible(find.text('Scan Passport'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Scan Passport'));
       await tester.pumpAndSettle();
 
       // Date fields should show format error
@@ -132,7 +136,9 @@ void main() {
         '940623',
       );
 
-      await tester.tap(find.text('Read Passport'));
+      await tester.ensureVisible(find.text('Scan Passport'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Scan Passport'));
       await tester.pumpAndSettle();
 
       // Should navigate to NFC Scan screen
@@ -151,6 +157,8 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('Scan MRZ'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Scan MRZ'));
       await tester.pumpAndSettle();
 

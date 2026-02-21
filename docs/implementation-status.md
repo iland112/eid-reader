@@ -19,14 +19,12 @@ This document tracks what has been implemented and what remains.
 - Riverpod state management with `StateNotifier`
 - DevContainer setup (`gmeligio/flutter-android:3.27.4`)
 
-### Security Hardening (v0.2)
+### Security Hardening (v0.2 → v0.7)
 
-- **FLAG_SECURE**: Android screen capture prevention on passport detail screen
-  - `SecureScreenService` abstraction with MethodChannel implementation
-  - Native Kotlin handler in `MainActivity.kt`
-  - Enabled on screen enter, disabled on leave
+- **FLAG_SECURE**: `SecureScreenService` + `MainActivity.kt` MethodChannel (available but disabled in v0.7 per user preference)
 - **Biometric buffer clearing**: `Uint8List.fillRange(0, length, 0)` in `dispose()`
-- No persistent storage, no PII logging, no network transmission
+- No persistent storage, no PII logging
+- Network transmission only to PA Service API (SOD + DG bytes for verification)
 
 ### Dependency Injection Refactoring (v0.2)
 
@@ -69,21 +67,43 @@ This document tracks what has been implemented and what remains.
 - PA verification is optional (graceful degradation if server unavailable or SOD empty)
 - Base URL configurable via `paServiceBaseUrlProvider` (Riverpod)
 
-### Test Suite (v0.2 + v0.3 + v0.4 + v0.5)
+### NFC & UX Improvements (v0.7)
 
-- 172 tests across 16 test files (121 unit + 51 widget)
+- **Haptic feedback**: `HapticFeedback.heavyImpact()` on NFC tag detection
+- **Wakelock**: `wakelock_plus` keeps screen on during NFC reading
+- **FLAG_SECURE disabled**: Screen capture enabled (removed `SecureScreenService` from passport detail)
+- **NFC Scan Screen redesign**:
+  - `NfcPulseAnimation` widget: radar-like ripple animation via `CustomPainter` + `AnimationController`
+  - `ReadingStepIndicator` widget: 4-phase horizontal stepper (Connect → Auth → Read → Verify)
+  - Positioning guide card with phone→passport illustration
+  - Retry counter (max 3 attempts, then "Return to MRZ Input")
+- **Passport Detail Screen redesign**:
+  - `PassportHeaderCard` widget: passport-style card with Hero-wrapped photo, name, nationality badge, doc number, expiry badge
+  - `InfoSectionCard` widget: reusable card with icon, title, label-value rows
+  - `ExpiryDateBadge` widget: color-coded expiry status (green/orange/red) with 70-year pivot YYMMDD parsing
+  - Security verification badge (green verified / orange pending)
+- **Page transitions**: `CustomTransitionPage` — fade+slide for NFC scan, fade for passport detail (Hero-compatible)
+- **MRZ Camera Screen**: flashlight toggle button in AppBar
+- **MRZ Input Screen**: instruction card, grouped form card, button renamed "Scan Passport" with `Icons.contactless`
+
+### Test Suite (v0.2 + v0.3 + v0.4 + v0.5 + v0.7)
+
+- 171 tests across 16 test files (121 unit + 50 widget)
 - Manual mock pattern (no mockito codegen due to analyzer incompatibility)
 - Widget tests for all 4 screens (MrzInput, MrzCamera, NfcScan, PassportDetail)
 - See [testing.md](testing.md) for details
 
-### Android Deployment Config (v0.6)
+### Android Deployment Config (v0.6 + v0.7)
 
 - `minSdk` raised from 21 → 24 (`flutter_nfc_kit` requires API 24+)
 - NFC permission added to `AndroidManifest.xml` (`android.permission.NFC`)
 - INTERNET permission added to main manifest (required for PA API communication)
 - `<uses-feature android:name="android.hardware.nfc" android:required="true" />`
 - `<uses-feature android:name="android.hardware.camera" android:required="false" />`
-- Debug APK build verified: `flutter build apk --debug` → 227MB
+- Kotlin Gradle plugin updated to 2.2.0 (required by `wakelock_plus` / `package_info_plus`)
+- R8 minify + shrink resources enabled for release builds
+- ProGuard rules for ML Kit optional script recognizers (`proguard-rules.pro`)
+- Release APK build verified: `flutter build apk --release` → 89MB
 - Target device: Galaxy A36 5G (Android 16, API 36)
 
 ### Infrastructure (v0.2)

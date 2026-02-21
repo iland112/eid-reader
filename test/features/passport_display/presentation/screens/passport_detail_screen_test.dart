@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:eid_reader/core/platform/secure_screen_service.dart';
 import 'package:eid_reader/features/passport_display/presentation/screens/passport_detail_screen.dart';
 import 'package:eid_reader/features/passport_reader/domain/entities/pa_verification_result.dart';
 import 'package:eid_reader/features/passport_reader/domain/entities/passport_data.dart';
@@ -38,31 +37,9 @@ const _verifiedPassportData = PassportData(
   activeAuthValid: true,
 );
 
-/// Mock SecureScreenService that tracks calls.
-class MockSecureScreenService implements SecureScreenService {
-  int enableCount = 0;
-  int disableCount = 0;
-
-  @override
-  Future<void> enableSecureMode() async {
-    enableCount++;
-  }
-
-  @override
-  Future<void> disableSecureMode() async {
-    disableCount++;
-  }
-}
-
-/// Builds a testable widget with provider overrides.
-Widget _buildTestApp({
-  required PassportData passportData,
-  required MockSecureScreenService mockSecureService,
-}) {
+/// Builds a testable widget.
+Widget _buildTestApp({required PassportData passportData}) {
   return ProviderScope(
-    overrides: [
-      secureScreenServiceProvider.overrideWithValue(mockSecureService),
-    ],
     child: MaterialApp(
       home: PassportDetailScreen(passportData: passportData),
     ),
@@ -71,18 +48,9 @@ Widget _buildTestApp({
 
 void main() {
   group('PassportDetailScreen', () {
-    late MockSecureScreenService mockSecureService;
-
-    setUp(() {
-      mockSecureService = MockSecureScreenService();
-    });
-
     testWidgets('renders app bar title', (tester) async {
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: _testPassportData,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: _testPassportData),
       );
       await tester.pumpAndSettle();
 
@@ -91,41 +59,32 @@ void main() {
 
     testWidgets('renders personal information section', (tester) async {
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: _testPassportData,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: _testPassportData),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('Personal Information'), findsOneWidget);
-      expect(find.text('JOHN DOE'), findsOneWidget);
-      expect(find.text('USA'), findsWidgets); // nationality + issuingState
-      expect(find.text('690806'), findsWidgets); // dateOfBirth + dateOfExpiry may overlap
-      expect(find.text('M'), findsOneWidget);
+      expect(find.text('JOHN DOE'), findsWidgets); // header card + info section
+      expect(find.text('USA'), findsWidgets); // header badge + nationality + issuingState
+      expect(find.text('690806'), findsWidgets); // dateOfBirth in header + info
+      expect(find.text('M'), findsWidgets); // sex in header + info
     });
 
     testWidgets('renders document information section', (tester) async {
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: _testPassportData,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: _testPassportData),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Document Information'), findsOneWidget);
-      expect(find.text('L898902C'), findsOneWidget);
-      expect(find.text('940623'), findsOneWidget);
+      expect(find.text('Document Details'), findsOneWidget);
+      expect(find.text('L898902C'), findsWidgets); // header card + info
+      expect(find.text('940623'), findsWidgets); // expiry in header + info
       expect(find.text('P'), findsOneWidget);
     });
 
     testWidgets('renders security status section', (tester) async {
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: _testPassportData,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: _testPassportData),
       );
       await tester.pumpAndSettle();
 
@@ -138,10 +97,7 @@ void main() {
     testWidgets('shows Verification Pending badge when not verified',
         (tester) async {
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: _testPassportData,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: _testPassportData),
       );
       await tester.pumpAndSettle();
 
@@ -151,10 +107,7 @@ void main() {
 
     testWidgets('shows Document Verified badge when verified', (tester) async {
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: _verifiedPassportData,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: _verifiedPassportData),
       );
       await tester.pumpAndSettle();
 
@@ -164,28 +117,22 @@ void main() {
 
     testWidgets('shows verified passport data correctly', (tester) async {
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: _verifiedPassportData,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: _verifiedPassportData),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('JANE SMITH'), findsOneWidget);
+      expect(find.text('JANE SMITH'), findsWidgets); // header + info
       expect(find.text('PACE'), findsOneWidget);
       expect(find.text('Verified'), findsWidgets); // passive + active
     });
 
     testWidgets('shows person icon when no face image', (tester) async {
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: _testPassportData,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: _testPassportData),
       );
       await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.person), findsOneWidget);
+      expect(find.byIcon(Icons.person), findsWidgets);
     });
 
     testWidgets('shows Active Auth as Failed when false', (tester) async {
@@ -203,30 +150,14 @@ void main() {
       );
 
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: data,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: data),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('Failed'), findsOneWidget);
     });
 
-    testWidgets('calls enableSecureMode on init', (tester) async {
-      await tester.pumpWidget(
-        _buildTestApp(
-          passportData: _testPassportData,
-          mockSecureService: mockSecureService,
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(mockSecureService.enableCount, 1);
-    });
-
-    testWidgets('calls disableSecureMode and zeroes buffer on dispose',
-        (tester) async {
+    testWidgets('zeroes face buffer on dispose', (tester) async {
       final faceBytes = Uint8List.fromList([1, 2, 3, 4, 5]);
       final data = PassportData(
         surname: 'DOE',
@@ -241,15 +172,10 @@ void main() {
         faceImageBytes: faceBytes,
       );
 
-      // Use a navigatorKey so we can push a replacement within the same
-      // ProviderScope, triggering dispose of PassportDetailScreen cleanly.
       final navKey = GlobalKey<NavigatorState>();
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            secureScreenServiceProvider.overrideWithValue(mockSecureService),
-          ],
           child: MaterialApp(
             navigatorKey: navKey,
             home: PassportDetailScreen(passportData: data),
@@ -258,7 +184,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Navigate away within the same ProviderScope to trigger dispose
+      // Navigate away to trigger dispose
       navKey.currentState!.pushReplacement(
         MaterialPageRoute(
           builder: (_) => const Scaffold(body: Text('Other')),
@@ -266,33 +192,24 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Verify secure mode was disabled
-      expect(mockSecureService.disableCount, 1);
-
       // Verify buffer was zeroed
       expect(faceBytes.every((b) => b == 0), isTrue);
     });
 
     testWidgets('renders all section headers', (tester) async {
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: _testPassportData,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: _testPassportData),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('Personal Information'), findsOneWidget);
-      expect(find.text('Document Information'), findsOneWidget);
+      expect(find.text('Document Details'), findsOneWidget);
       expect(find.text('Security Status'), findsOneWidget);
     });
 
     testWidgets('renders all field labels', (tester) async {
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: _testPassportData,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: _testPassportData),
       );
       await tester.pumpAndSettle();
 
@@ -312,10 +229,7 @@ void main() {
     testWidgets('does not show PA details section when no PA result',
         (tester) async {
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: _testPassportData,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: _testPassportData),
       );
       await tester.pumpAndSettle();
 
@@ -344,10 +258,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: dataWithPa,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: dataWithPa),
       );
       await tester.pumpAndSettle();
 
@@ -378,10 +289,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: dataWithPa,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: dataWithPa),
       );
       await tester.pumpAndSettle();
 
@@ -409,10 +317,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        _buildTestApp(
-          passportData: dataWithPa,
-          mockSecureService: mockSecureService,
-        ),
+        _buildTestApp(passportData: dataWithPa),
       );
       await tester.pumpAndSettle();
 

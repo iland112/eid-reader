@@ -21,6 +21,9 @@ class PassportData extends Equatable {
   final String authProtocol;
   final PaVerificationResult? paVerificationResult;
 
+  /// NFC step timings in ms (debug diagnostics, excluded from equality).
+  final Map<String, int> debugTimings;
+
   const PassportData({
     required this.surname,
     required this.givenNames,
@@ -36,6 +39,7 @@ class PassportData extends Equatable {
     this.activeAuthValid,
     this.authProtocol = 'BAC',
     this.paVerificationResult,
+    this.debugTimings = const {},
   });
 
   String get fullName => '$givenNames $surname';
@@ -55,6 +59,7 @@ class PassportData extends Equatable {
     bool? activeAuthValid,
     String? authProtocol,
     PaVerificationResult? paVerificationResult,
+    Map<String, int>? debugTimings,
   }) {
     return PassportData(
       surname: surname ?? this.surname,
@@ -71,6 +76,7 @@ class PassportData extends Equatable {
       activeAuthValid: activeAuthValid ?? this.activeAuthValid,
       authProtocol: authProtocol ?? this.authProtocol,
       paVerificationResult: paVerificationResult ?? this.paVerificationResult,
+      debugTimings: debugTimings ?? this.debugTimings,
     );
   }
 

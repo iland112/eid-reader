@@ -117,43 +117,44 @@ void main() {
       await tester.pumpWidget(_buildTestApp(datasource: mock));
       await tester.pump();
 
-      expect(find.text('Reading Passport'), findsOneWidget);
+      expect(find.text('Scanning Passport'), findsOneWidget);
     });
 
-    testWidgets('shows NFC icon during reading', (tester) async {
+    testWidgets('shows contactless icon during reading', (tester) async {
       final mock = MockPassportDatasource()..mockBlock();
 
       await tester.pumpWidget(_buildTestApp(datasource: mock));
       await tester.pump();
 
-      expect(find.byIcon(Icons.nfc), findsOneWidget);
+      expect(find.byIcon(Icons.contactless), findsOneWidget);
     });
 
-    testWidgets('shows progress indicator during reading', (tester) async {
+    testWidgets('shows step indicator during reading', (tester) async {
       final mock = MockPassportDatasource()..mockBlock();
 
       await tester.pumpWidget(_buildTestApp(datasource: mock));
       await tester.pump();
 
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      // Step indicator labels
+      expect(find.text('Connect'), findsOneWidget);
+      expect(find.text('Auth'), findsOneWidget);
+      expect(find.text('Read'), findsOneWidget);
+      expect(find.text('Verify'), findsOneWidget);
     });
 
-    testWidgets('shows error icon and message on TagLost', (tester) async {
-      final mock = MockPassportDatasource()
-        ..mockError(Exception('TagLost'));
+    testWidgets('shows positioning guide during connecting', (tester) async {
+      final mock = MockPassportDatasource()..mockBlock();
 
       await tester.pumpWidget(_buildTestApp(datasource: mock));
       await tester.pump();
-      await tester.pump();
 
-      expect(find.byIcon(Icons.error), findsOneWidget);
       expect(
-        find.text('Connection lost. Keep your phone still and try again.'),
+        find.text('Place phone flat on the passport data page'),
         findsOneWidget,
       );
     });
 
-    testWidgets('shows Try Again button on error', (tester) async {
+    testWidgets('shows error message on TagLost', (tester) async {
       final mock = MockPassportDatasource()
         ..mockError(Exception('TagLost'));
 
@@ -161,19 +162,23 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('Try Again'), findsOneWidget);
-      expect(find.byIcon(Icons.refresh), findsOneWidget);
+      expect(
+        find.text(
+            'Connection lost. Keep your phone still against the passport and try again.'),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('hides progress indicator on error', (tester) async {
+    testWidgets('shows Retry button on error', (tester) async {
       final mock = MockPassportDatasource()
-        ..mockError(Exception('some error'));
+        ..mockError(Exception('TagLost'));
 
       await tester.pumpWidget(_buildTestApp(datasource: mock));
       await tester.pump();
       await tester.pump();
 
-      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.textContaining('Retry'), findsOneWidget);
+      expect(find.byIcon(Icons.refresh), findsOneWidget);
     });
 
     testWidgets('shows authentication error message', (tester) async {
@@ -225,13 +230,14 @@ void main() {
 
       await tester.pumpWidget(_buildTestApp(datasource: mock));
       await tester.pump();
+      // Wait for the 400ms navigation delay + animation
       await tester.pumpAndSettle();
 
       // Should navigate to passport-detail route
       expect(find.text('Passport Detail'), findsOneWidget);
     });
 
-    testWidgets('Try Again button retriggers reading and navigates on success',
+    testWidgets('Retry button retriggers reading and navigates on success',
         (tester) async {
       final mock = MockPassportDatasource()
         ..mockError(Exception('TagLost'));
@@ -241,12 +247,12 @@ void main() {
       await tester.pump();
 
       // Verify error state
-      expect(find.text('Try Again'), findsOneWidget);
+      expect(find.textContaining('Retry'), findsOneWidget);
 
       // Now mock success for retry
       mock.mockSuccess(_testReadResult);
 
-      await tester.tap(find.text('Try Again'));
+      await tester.tap(find.textContaining('Retry'));
       await tester.pumpAndSettle();
 
       // Should navigate to passport-detail route

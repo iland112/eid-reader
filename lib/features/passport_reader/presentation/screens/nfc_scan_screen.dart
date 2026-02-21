@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../mrz_input/domain/entities/mrz_data.dart';
+import '../../domain/entities/passport_data.dart';
 import '../providers/passport_reader_provider.dart';
+import '../widgets/nfc_pulse_animation.dart';
+import '../widgets/reading_step_indicator.dart';
 
 class NfcScanScreen extends ConsumerStatefulWidget {
   final MrzData mrzData;
@@ -16,10 +20,14 @@ class NfcScanScreen extends ConsumerStatefulWidget {
 
 class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
   PassportReaderNotifier? _notifier;
+  int _retryCount = 0;
+  static const int _maxRetries = 3;
 
   @override
   void initState() {
     super.initState();
+    // Keep screen on during NFC reading to prevent NFC power-off
+    WakelockPlus.enable();
     // Start reading when screen opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _notifier = ref.read(passportReaderProvider.notifier);
@@ -29,6 +37,7 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
 
   @override
   void dispose() {
+    WakelockPlus.disable();
     // Schedule reset after the current frame to avoid modifying provider
     // state during widget tree teardown (Riverpod restriction).
     final notifier = _notifier;
@@ -40,6 +49,19 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
     super.dispose();
   }
 
+  void _scheduleNavigation(PassportData data) {
+    // Brief delay to show success state before navigating
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      context.pushReplacementNamed('passport-detail', extra: data);
+    });
+  }
+
+  void _retry() {
+    setState(() => _retryCount++);
+    ref.read(passportReaderProvider.notifier).readPassport(widget.mrzData);
+  }
+
   @override
   Widget build(BuildContext context) {
     final readerState = ref.watch(passportReaderProvider);
@@ -47,24 +69,37 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
     // Navigate to detail screen when done
     ref.listen(passportReaderProvider, (previous, next) {
       if (next.step == ReadingStep.done && next.data != null) {
-        context.pushReplacementNamed('passport-detail', extra: next.data);
+        _scheduleNavigation(next.data!);
       }
     });
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Reading Passport'),
+        title: const Text('Scanning Passport'),
       ),
-      body: Center(
+      body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildIcon(readerState.step),
-              const SizedBox(height: 32),
+              // Step progress indicator
+              ReadingStepIndicator(step: readerState.step),
+              const Spacer(),
+
+              // Animated pulse
+              NfcPulseAnimation(step: readerState.step),
+              const SizedBox(height: 24),
+
+              // Status message
               _buildStatusText(readerState),
               const SizedBox(height: 16),
+
+              // Positioning guide (visible during connecting/idle)
+              if (readerState.step == ReadingStep.connecting ||
+                  readerState.step == ReadingStep.idle)
+                _buildPositioningGuide(context),
+
+              // Error section
               if (readerState.step == ReadingStep.error) ...[
                 if (readerState.debugError != null) ...[
                   const SizedBox(height: 12),
@@ -88,22 +123,36 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
                   ),
                 ],
                 const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    ref
-                        .read(passportReaderProvider.notifier)
-                        .readPassport(widget.mrzData);
-                  },
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Try Again'),
-                ),
+                if (_retryCount < _maxRetries)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _retry,
+                      icon: const Icon(Icons.refresh),
+                      label: Text('Retry (${_retryCount + 1}/$_maxRetries)'),
+                    ),
+                  )
+                else ...[
+                  Text(
+                    'Multiple attempts failed. Please re-check your passport details.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => context.pop(),
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('Return to MRZ Input'),
+                    ),
+                  ),
+                ],
               ],
-              if (readerState.step != ReadingStep.error &&
-                  readerState.step != ReadingStep.done)
-                const Padding(
-                  padding: EdgeInsets.only(top: 24),
-                  child: LinearProgressIndicator(),
-                ),
+
+              const Spacer(),
             ],
           ),
         ),
@@ -111,38 +160,47 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
     );
   }
 
-  Widget _buildIcon(ReadingStep step) {
-    switch (step) {
-      case ReadingStep.idle:
-      case ReadingStep.connecting:
-      case ReadingStep.authenticating:
-      case ReadingStep.readingDg1:
-      case ReadingStep.readingDg2:
-      case ReadingStep.readingSod:
-        return Icon(
-          Icons.nfc,
-          size: 96,
-          color: Theme.of(context).colorScheme.primary,
-        );
-      case ReadingStep.verifyingPa:
-        return Icon(
-          Icons.verified_user,
-          size: 96,
-          color: Theme.of(context).colorScheme.primary,
-        );
-      case ReadingStep.done:
-        return Icon(
-          Icons.check_circle,
-          size: 96,
-          color: Theme.of(context).colorScheme.primary,
-        );
-      case ReadingStep.error:
-        return Icon(
-          Icons.error,
-          size: 96,
-          color: Theme.of(context).colorScheme.error,
-        );
-    }
+  Widget _buildPositioningGuide(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 0,
+      color: colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.phone_android, size: 32, color: colorScheme.primary),
+                const SizedBox(width: 8),
+                Icon(Icons.arrow_forward,
+                    size: 20, color: colorScheme.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Icon(Icons.menu_book, size: 32, color: colorScheme.primary),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Place phone flat on the passport data page',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Keep still until reading completes',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildStatusText(PassportReaderState state) {
@@ -151,7 +209,7 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
       case ReadingStep.idle:
         message = 'Preparing...';
       case ReadingStep.connecting:
-        message = 'Hold your phone against the back of the passport';
+        message = 'Waiting for passport...';
       case ReadingStep.authenticating:
         message = 'Authenticating...';
       case ReadingStep.readingDg1:
@@ -163,7 +221,7 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
       case ReadingStep.verifyingPa:
         message = 'Verifying document authenticity...';
       case ReadingStep.done:
-        message = 'Reading complete!';
+        message = 'Scan complete!';
       case ReadingStep.error:
         message = state.errorMessage ?? 'An error occurred';
     }

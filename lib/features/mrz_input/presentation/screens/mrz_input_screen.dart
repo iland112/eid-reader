@@ -59,24 +59,62 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(
-                Icons.credit_card,
-                size: 64,
-                color: Theme.of(context).colorScheme.primary,
+              // Instruction card
+              Card(
+                elevation: 0,
+                color: Theme.of(context)
+                    .colorScheme
+                    .primaryContainer
+                    .withValues(alpha: 0.3),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.credit_card,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Enter Passport MRZ Data',
+                        style:
+                            Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Enter the three data fields from your passport\'s '
+                        'machine-readable zone, or scan them with your camera.',
+                        style:
+                            Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: 16),
-              Text(
-                'Enter Passport MRZ Data',
-                style: Theme.of(context).textTheme.headlineSmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Enter the information from your passport to read the chip data via NFC.',
-                style: Theme.of(context).textTheme.bodyMedium,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+
+              // Form fields in a card
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
               TextFormField(
                 controller: _docNumberController,
                 decoration: const InputDecoration(
@@ -130,6 +168,10 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
                 onChanged: (value) =>
                     ref.read(mrzInputProvider.notifier).updateDateOfExpiry(value),
               ),
+                    ],
+                  ),
+                ),
+              ),
               const SizedBox(height: 24),
               OutlinedButton.icon(
                 onPressed: _onScanMrz,
@@ -139,8 +181,8 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
               const SizedBox(height: 12),
               ElevatedButton.icon(
                 onPressed: _onReadPassport,
-                icon: const Icon(Icons.nfc),
-                label: const Text('Read Passport'),
+                icon: const Icon(Icons.contactless),
+                label: const Text('Scan Passport'),
               ),
             ],
           ),
