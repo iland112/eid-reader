@@ -156,7 +156,11 @@ class _NfcPulseAnimationState extends State<NfcPulseAnimation>
       child: Icon(
         icon,
         size: isDone ? 44 : 36,
-        color: Colors.white,
+        color: isError
+            ? colorScheme.onError
+            : isDone
+                ? Colors.white
+                : colorScheme.onPrimary,
       ),
     );
   }

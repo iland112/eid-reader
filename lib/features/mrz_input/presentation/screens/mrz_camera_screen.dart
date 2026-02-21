@@ -328,15 +328,15 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.black87,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
               cameraState.debugOcrText!,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'monospace',
                 fontSize: 10,
-                color: Colors.greenAccent,
+                color: Theme.of(context).colorScheme.primary,
               ),
               maxLines: 8,
               overflow: TextOverflow.ellipsis,

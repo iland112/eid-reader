@@ -153,11 +153,12 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen> {
       'dg2': 'DG2 (Face)',
       'sod': 'SOD',
     };
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: Colors.black87,
+      color: colorScheme.surfaceContainerHighest,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -165,12 +166,12 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.timer, size: 16, color: Colors.greenAccent),
+                Icon(Icons.timer, size: 16, color: colorScheme.primary),
                 const SizedBox(width: 6),
                 Text(
                   'Scan Timing',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: Colors.greenAccent,
+                        color: colorScheme.primary,
                         fontWeight: FontWeight.bold,
                       ),
                 ),
@@ -186,46 +187,46 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen> {
                       width: 90,
                       child: Text(
                         labels[entry.key] ?? entry.key,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'monospace',
                           fontSize: 11,
-                          color: Colors.greenAccent,
+                          color: colorScheme.primary,
                         ),
                       ),
                     ),
                     Text(
                       '${(entry.value / 1000).toStringAsFixed(1)}s',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 11,
-                        color: Colors.white,
+                        color: colorScheme.onSurface,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
               ),
-            const Divider(color: Colors.white24, height: 8),
+            Divider(color: colorScheme.outlineVariant, height: 8),
             Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 90,
                   child: Text(
                     'Total',
                     style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 11,
-                      color: Colors.greenAccent,
+                      color: colorScheme.primary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
                 Text(
                   '${(total / 1000).toStringAsFixed(1)}s',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 11,
-                    color: Colors.yellowAccent,
+                    color: colorScheme.tertiary,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -239,29 +240,27 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen> {
 
   Widget _buildSecurityBadge(BuildContext context) {
     final isVerified = widget.passportData.passiveAuthValid;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final badgeColor = isVerified ? Colors.green : Colors.orange;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isVerified
-            ? Colors.green.withValues(alpha: 0.1)
-            : Colors.orange.withValues(alpha: 0.1),
+        color: badgeColor.withValues(alpha: isDark ? 0.2 : 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isVerified ? Colors.green : Colors.orange,
-        ),
+        border: Border.all(color: badgeColor),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             isVerified ? Icons.verified : Icons.warning,
-            color: isVerified ? Colors.green : Colors.orange,
+            color: badgeColor,
           ),
           const SizedBox(width: 8),
           Text(
             isVerified ? 'Document Verified' : 'Verification Pending',
             style: TextStyle(
-              color: isVerified ? Colors.green : Colors.orange,
+              color: badgeColor,
               fontWeight: FontWeight.bold,
               fontSize: 15,
             ),

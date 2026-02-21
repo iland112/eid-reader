@@ -106,7 +106,7 @@ class _StepDot extends StatelessWidget {
       case _DotState.completed:
         bgColor = colorScheme.primary;
         borderColor = colorScheme.primary;
-        child = const Icon(Icons.check, size: 14, color: Colors.white);
+        child = Icon(Icons.check, size: 14, color: colorScheme.onPrimary);
       case _DotState.active:
         bgColor = Colors.transparent;
         borderColor = colorScheme.primary;
@@ -121,7 +121,7 @@ class _StepDot extends StatelessWidget {
       case _DotState.error:
         bgColor = colorScheme.error;
         borderColor = colorScheme.error;
-        child = const Icon(Icons.close, size: 14, color: Colors.white);
+        child = Icon(Icons.close, size: 14, color: colorScheme.onError);
       case _DotState.pending:
         bgColor = Colors.transparent;
         borderColor = colorScheme.outlineVariant;

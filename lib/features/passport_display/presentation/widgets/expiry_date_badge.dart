@@ -34,12 +34,15 @@ class ExpiryDateBadge extends StatelessWidget {
       icon = Icons.check_circle_outline;
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: badgeColor.withValues(alpha: 0.15),
+        color: badgeColor.withValues(alpha: isDark ? 0.25 : 0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: badgeColor.withValues(alpha: 0.5)),
+        border:
+            Border.all(color: badgeColor.withValues(alpha: isDark ? 0.7 : 0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

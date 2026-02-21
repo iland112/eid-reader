@@ -107,15 +107,15 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.black87,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       'DEBUG: ${readerState.debugError}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 10,
-                        color: Colors.greenAccent,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                       maxLines: 10,
                       overflow: TextOverflow.ellipsis,
