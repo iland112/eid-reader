@@ -14,7 +14,9 @@ class PcscServiceImpl implements PcscService {
     } on Exception {
       return PcscStatus.notSupported;
     } finally {
-      await context.release();
+      try {
+        await context.release();
+      } catch (_) {}
     }
   }
 
@@ -27,7 +29,9 @@ class PcscServiceImpl implements PcscService {
     } on Exception {
       return [];
     } finally {
-      await context.release();
+      try {
+        await context.release();
+      } catch (_) {}
     }
   }
 }

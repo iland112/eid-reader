@@ -29,7 +29,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/scan',
         name: 'scan',
         pageBuilder: (context, state) {
-          final mrzData = state.extra as MrzData;
+          final mrzData = state.extra;
+          if (mrzData is! MrzData) {
+            return const MaterialPage(
+              child: Scaffold(body: Center(child: Text('Missing MRZ data'))),
+            );
+          }
 
           // Platform-adaptive scan screen
           final scanScreen = PassportDatasourceFactory.isNfcPlatform
@@ -61,7 +66,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/passport-detail',
         name: 'passport-detail',
         pageBuilder: (context, state) {
-          final passportData = state.extra as PassportData;
+          final passportData = state.extra;
+          if (passportData is! PassportData) {
+            return const MaterialPage(
+              child: Scaffold(
+                  body: Center(child: Text('Missing passport data'))),
+            );
+          }
           return CustomTransitionPage(
             key: state.pageKey,
             child: PassportDetailScreen(passportData: passportData),

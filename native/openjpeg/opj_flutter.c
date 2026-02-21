@@ -23,12 +23,13 @@ static OPJ_SIZE_T mem_read(void* p_buffer, OPJ_SIZE_T p_nb_bytes, void* p_user_d
 
 static OPJ_OFF_T mem_skip(OPJ_OFF_T p_nb_bytes, void* p_user_data) {
     mem_stream_t* s = (mem_stream_t*)p_user_data;
-    OPJ_OFF_T new_pos = (OPJ_OFF_T)s->position + p_nb_bytes;
+    OPJ_OFF_T old_pos = (OPJ_OFF_T)s->position;
+    OPJ_OFF_T new_pos = old_pos + p_nb_bytes;
 
     if (new_pos < 0) return -1;
     if ((size_t)new_pos > s->length) {
         s->position = s->length;
-        return (OPJ_OFF_T)(s->length) - (OPJ_OFF_T)s->position + p_nb_bytes;
+        return (OPJ_OFF_T)(s->length) - old_pos;
     }
 
     s->position = (size_t)new_pos;
@@ -43,6 +44,8 @@ static OPJ_BOOL mem_seek(OPJ_OFF_T p_nb_bytes, void* p_user_data) {
 }
 
 static int clamp_component(opj_image_comp_t* comp, size_t idx) {
+    if (comp->prec == 0) return 0;
+
     int value = comp->data[idx];
 
     /* Handle signed components */
@@ -131,6 +134,15 @@ int opj_flutter_decode(
         opj_stream_destroy(stream);
         opj_destroy_codec(codec);
         return -7;
+    }
+
+    /* Guard against unreasonable dimensions (max 10000x10000 = 100MP).
+     * Also prevents integer overflow in rgba_size on 32-bit platforms. */
+    if (w > 10000 || h > 10000) {
+        opj_image_destroy(image);
+        opj_stream_destroy(stream);
+        opj_destroy_codec(codec);
+        return -9;
     }
 
     /* Allocate RGBA output buffer */

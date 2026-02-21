@@ -4,30 +4,13 @@ import 'package:logging/logging.dart';
 
 import '../../../../core/image/image_utils.dart';
 import '../../../../core/platform/fast_nfc_provider.dart';
+import '../../../../core/utils/mrz_utils.dart';
 import '../../../mrz_input/domain/entities/mrz_data.dart';
 import '../../domain/entities/passport_data.dart';
 import 'passport_datasource.dart';
 import 'passport_read_result.dart';
 
 final _log = Logger('NfcPassportDatasource');
-
-String _formatYYMMDD(DateTime date) {
-  final y = (date.year % 100).toString().padLeft(2, '0');
-  final m = date.month.toString().padLeft(2, '0');
-  final d = date.day.toString().padLeft(2, '0');
-  return '$y$m$d';
-}
-
-/// Parses YYMMDD string to DateTime.
-DateTime _parseYYMMDD(String yymmdd) {
-  final yy = int.parse(yymmdd.substring(0, 2));
-  final mm = int.parse(yymmdd.substring(2, 4));
-  final dd = int.parse(yymmdd.substring(4, 6));
-  // ICAO 9303: years 00-99 map to 2000-2099 for expiry, 1900-1999 for birth.
-  // For DBAKey, the library handles the century internally.
-  final year = yy < 70 ? 2000 + yy : 1900 + yy;
-  return DateTime(year, mm, dd);
-}
 
 /// Reads e-Passport data via NFC using the dmrtd library.
 class NfcPassportDatasource implements PassportDatasource {
@@ -97,8 +80,8 @@ class NfcPassportDatasource implements PassportDatasource {
 
       final dbaKey = DBAKey(
         mrzData.documentNumber,
-        _parseYYMMDD(mrzData.dateOfBirth),
-        _parseYYMMDD(mrzData.dateOfExpiry),
+        MrzUtils.parseYYMMDD(mrzData.dateOfBirth),
+        MrzUtils.parseYYMMDD(mrzData.dateOfExpiry),
       );
 
       // Authenticate: BAC directly (faster for passports without PACE)
@@ -126,7 +109,10 @@ class NfcPassportDatasource implements PassportDatasource {
         final dg2 = await passport.readEfDG2();
         dg2Bytes = dg2.toBytes();
         // Decode face image (handles JPEG passthrough + JPEG2000 conversion)
-        faceImageBytes = decodeFaceImage(dg2.imageData!);
+        final rawImage = dg2.imageData;
+        if (rawImage != null) {
+          faceImageBytes = decodeFaceImage(rawImage);
+        }
         timings['dg2'] = sw.elapsedMilliseconds;
         _log.info('DG2 read in ${sw.elapsedMilliseconds}ms (${dg2Bytes.length} bytes)');
       } catch (e) {
@@ -165,9 +151,9 @@ class NfcPassportDatasource implements PassportDatasource {
           givenNames: mrz.firstName,
           documentNumber: mrz.documentNumber,
           nationality: mrz.nationality,
-          dateOfBirth: _formatYYMMDD(mrz.dateOfBirth),
+          dateOfBirth: MrzUtils.formatYYMMDD(mrz.dateOfBirth),
           sex: mrz.gender,
-          dateOfExpiry: _formatYYMMDD(mrz.dateOfExpiry),
+          dateOfExpiry: MrzUtils.formatYYMMDD(mrz.dateOfExpiry),
           issuingState: mrz.country,
           documentType: mrz.documentCode,
           faceImageBytes: faceImageBytes,
