@@ -66,6 +66,27 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
               _buildStatusText(readerState),
               const SizedBox(height: 16),
               if (readerState.step == ReadingStep.error) ...[
+                if (readerState.debugError != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'DEBUG: ${readerState.debugError}',
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 10,
+                        color: Colors.greenAccent,
+                      ),
+                      maxLines: 10,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 ElevatedButton.icon(
                   onPressed: () {

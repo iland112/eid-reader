@@ -43,6 +43,7 @@ class NfcPassportDatasource implements PassportDatasource {
     try {
       _log.info('Connecting to NFC...');
       await _nfc.connect(
+        timeout: const Duration(seconds: 30),
         iosAlertMessage: 'Hold your phone near the passport',
       );
 

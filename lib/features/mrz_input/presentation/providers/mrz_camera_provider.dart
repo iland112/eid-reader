@@ -9,22 +9,30 @@ class MrzCameraState {
   final bool isProcessing;
   final MrzData? detectedMrz;
   final String? errorMessage;
+  final String? debugOcrText;
+  final int debugFrameCount;
 
   const MrzCameraState({
     this.isProcessing = false,
     this.detectedMrz,
     this.errorMessage,
+    this.debugOcrText,
+    this.debugFrameCount = 0,
   });
 
   MrzCameraState copyWith({
     bool? isProcessing,
     MrzData? detectedMrz,
     String? errorMessage,
+    String? debugOcrText,
+    int? debugFrameCount,
   }) {
     return MrzCameraState(
       isProcessing: isProcessing ?? this.isProcessing,
       detectedMrz: detectedMrz ?? this.detectedMrz,
       errorMessage: errorMessage,
+      debugOcrText: debugOcrText ?? this.debugOcrText,
+      debugFrameCount: debugFrameCount ?? this.debugFrameCount,
     );
   }
 }
@@ -68,19 +76,43 @@ class MrzCameraNotifier extends StateNotifier<MrzCameraState> {
     // Skip if already processing or MRZ already detected
     if (state.isProcessing || state.detectedMrz != null) return;
 
+    final frameCount = state.debugFrameCount + 1;
     state = state.copyWith(isProcessing: true, errorMessage: null);
 
     try {
       final text = await _recognitionService.recognizeText(image);
       final mrzData = _parser.parse(text);
 
+      // Build debug info: show OCR text and candidate line info
+      final debugInfo = StringBuffer();
+      debugInfo.writeln('[Frame #$frameCount] OCR chars: ${text.length}');
+      final lines = text.split(RegExp(r'[\n\r]+'));
+      final longLines = lines
+          .where((l) => l.replaceAll(' ', '').length >= 30)
+          .toList();
+      debugInfo.writeln('Lines: ${lines.length}, long(>=30): ${longLines.length}');
+      for (final l in longLines.take(4)) {
+        final cleaned = l.replaceAll(' ', '');
+        debugInfo.writeln('[${cleaned.length}] ${cleaned.length > 50 ? '${cleaned.substring(0, 50)}...' : cleaned}');
+      }
+
       if (mrzData != null) {
-        state = MrzCameraState(detectedMrz: mrzData);
+        state = MrzCameraState(
+          detectedMrz: mrzData,
+          debugOcrText: debugInfo.toString(),
+          debugFrameCount: frameCount,
+        );
       } else {
-        state = const MrzCameraState();
+        state = MrzCameraState(
+          debugOcrText: debugInfo.toString(),
+          debugFrameCount: frameCount,
+        );
       }
     } catch (e) {
-      state = const MrzCameraState();
+      state = MrzCameraState(
+        debugOcrText: '[Frame #$frameCount] Error: $e',
+        debugFrameCount: frameCount,
+      );
     }
   }
 

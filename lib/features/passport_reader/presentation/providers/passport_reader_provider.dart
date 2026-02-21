@@ -28,22 +28,26 @@ class PassportReaderState {
   final ReadingStep step;
   final PassportData? data;
   final String? errorMessage;
+  final String? debugError;
 
   const PassportReaderState({
     this.step = ReadingStep.idle,
     this.data,
     this.errorMessage,
+    this.debugError,
   });
 
   PassportReaderState copyWith({
     ReadingStep? step,
     PassportData? data,
     String? errorMessage,
+    String? debugError,
   }) {
     return PassportReaderState(
       step: step ?? this.step,
       data: data ?? this.data,
       errorMessage: errorMessage,
+      debugError: debugError,
     );
   }
 }
@@ -119,9 +123,11 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
         data: passportData,
       );
     } catch (e) {
+      _log.warning('readPassport error: $e');
       state = PassportReaderState(
         step: ReadingStep.error,
         errorMessage: _getErrorMessage(e),
+        debugError: e.toString(),
       );
     }
   }

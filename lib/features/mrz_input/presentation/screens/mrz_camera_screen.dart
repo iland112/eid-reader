@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -114,17 +116,64 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
     final rotation = InputImageRotationValue.fromRawValue(sensorOrientation);
     if (rotation == null) return null;
 
-    final plane = image.planes.first;
+    // ML Kit fromBytes only works reliably with NV21 on Android.
+    // If camera returns YUV420, convert to NV21 first.
+    final Uint8List nv21Bytes;
+    if (image.format.group == ImageFormatGroup.nv21) {
+      nv21Bytes = image.planes.first.bytes;
+    } else if (image.format.group == ImageFormatGroup.yuv420) {
+      nv21Bytes = _yuv420ToNv21(image);
+    } else {
+      return null;
+    }
 
     return InputImage.fromBytes(
-      bytes: plane.bytes,
+      bytes: nv21Bytes,
       metadata: InputImageMetadata(
         size: Size(image.width.toDouble(), image.height.toDouble()),
         rotation: rotation,
         format: InputImageFormat.nv21,
-        bytesPerRow: plane.bytesPerRow,
+        bytesPerRow: image.width,
       ),
     );
+  }
+
+  /// Converts YUV_420_888 (3-plane) to NV21 (single buffer).
+  /// NV21 layout: [Y plane] [V U interleaved]
+  Uint8List _yuv420ToNv21(CameraImage image) {
+    final width = image.width;
+    final height = image.height;
+    final yPlane = image.planes[0];
+    final uPlane = image.planes[1];
+    final vPlane = image.planes[2];
+
+    final nv21 = Uint8List(width * height * 3 ~/ 2);
+
+    // Copy Y plane (handles bytesPerRow padding)
+    var destIndex = 0;
+    for (var row = 0; row < height; row++) {
+      final srcOffset = row * yPlane.bytesPerRow;
+      for (var col = 0; col < width; col++) {
+        nv21[destIndex++] = yPlane.bytes[srcOffset + col];
+      }
+    }
+
+    // Interleave V and U planes (NV21 = VUVUVU...)
+    final uvHeight = height ~/ 2;
+    final uvWidth = width ~/ 2;
+    final vPixelStride = vPlane.bytesPerPixel ?? 1;
+    final uPixelStride = uPlane.bytesPerPixel ?? 1;
+
+    for (var row = 0; row < uvHeight; row++) {
+      for (var col = 0; col < uvWidth; col++) {
+        final vIdx = row * vPlane.bytesPerRow + col * vPixelStride;
+        final uIdx = row * uPlane.bytesPerRow + col * uPixelStride;
+        nv21[destIndex++] = vPlane.bytes[vIdx];
+        nv21[destIndex++] = uPlane.bytes[uIdx];
+      }
+    }
+
+    return nv21;
   }
 
   void _onUseData(MrzData data) {
@@ -248,6 +297,28 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
           style: Theme.of(context).textTheme.bodyMedium,
           textAlign: TextAlign.center,
         ),
+        // Debug OCR output
+        if (cameraState.debugOcrText != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              cameraState.debugOcrText!,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 10,
+                color: Colors.greenAccent,
+              ),
+              maxLines: 8,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ],
     );
   }
