@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/theme_mode_provider.dart';
 import '../../domain/entities/mrz_data.dart';
 import '../../domain/usecases/validate_mrz.dart';
 import '../providers/mrz_input_provider.dart';
@@ -51,6 +52,20 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('eID Reader'),
+        actions: [
+          IconButton(
+            icon: Icon(
+              Theme.of(context).brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            tooltip: Theme.of(context).brightness == Brightness.dark
+                ? 'Switch to light mode'
+                : 'Switch to dark mode',
+            onPressed: () =>
+                ref.read(themeModeProvider.notifier).toggle(),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),

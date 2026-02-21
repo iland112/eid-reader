@@ -33,6 +33,7 @@ dependencies:
 
   # UI
   cupertino_icons: ^1.0.8
+  flutter_svg: ^2.0.17
 
   # HTTP client
   http: ^1.2.0
@@ -52,8 +53,17 @@ dev_dependencies:
   riverpod_generator: ^2.6.3
   build_runner: ^2.4.13
   mockito: ^5.4.4
+  flutter_launcher_icons: ^0.14.3
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/svg/
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: 'assets/favicon.ico'
+  adaptive_icon_background: '#FFFFFF'
+  adaptive_icon_foreground: 'assets/favicon.ico'

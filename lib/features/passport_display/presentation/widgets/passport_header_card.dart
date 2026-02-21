@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../../../core/utils/country_code_utils.dart';
 import '../../../passport_reader/domain/entities/passport_data.dart';
 import 'expiry_date_badge.dart';
 
@@ -114,17 +116,36 @@ class _NationalityBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final flagPath = CountryCodeUtils.flagAssetPath(nationality);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         color: colorScheme.surfaceContainerHighest,
       ),
-      child: Text(
-        nationality,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.bold,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (flagPath != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: SvgPicture.asset(
+                flagPath,
+                width: 20,
+                height: 14,
+                fit: BoxFit.cover,
+              ),
             ),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            nationality,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+        ],
       ),
     );
   }
