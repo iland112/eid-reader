@@ -58,7 +58,7 @@ Routes: `/mrz-input` → `/mrz-camera` (optional) → `/nfc-scan` → `/passport
 ### Multi-Platform Abstraction
 
 The `dmrtd` library's `ComProvider` interface enables platform-agnostic passport reading:
-- Android: `NfcProvider` (via `flutter_nfc_kit`, included in dmrtd)
+- Android: `FastNfcProvider` (optimized `ComProvider` using `flutter_nfc_kit` directly, skips NDEF check)
 - Desktop (future): `PcscProvider` (PC/SC API via `dart:ffi`)
 
 The `Passport` class from dmrtd works identically regardless of communication provider.
@@ -76,6 +76,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 | OCR | `google_mlkit_text_recognition` | ML Kit text recognition for MRZ scanning |
 | Permissions | `permission_handler` | Camera, NFC permissions |
 | Equality | `equatable` | Value equality for entities |
+| SVG Rendering | `flutter_svg` | Country flag SVG display |
 | Logging | `logging` | Structured logging |
 | Wakelock | `wakelock_plus` | Keeps screen on during NFC reading |
 
@@ -112,6 +113,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - See `docs/security.md` for full security architecture details.
 
 ### NFC / Passport Reading
+- `FastNfcProvider` replaces dmrtd's default `NfcProvider` for optimized NFC polling (skips NDEF check, platform sound).
 - Always try PACE authentication first, fall back to BAC.
 - Handle `TagLostException` with auto-retry guidance.
 - Handle authentication failures by returning user to MRZ input.
@@ -140,7 +142,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - Never expose raw exception messages to users.
 
 ### Testing
-- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **171 tests across 16 files.**
+- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **183 tests across 17 files.**
 - **Manual mock pattern** (no mockito codegen due to analyzer 7.x incompatibility).
 - Use Riverpod `ProviderContainer` overrides for dependency injection in tests.
 - For `MethodChannel` testing, use `TestDefaultBinaryMessengerBinding`.
@@ -167,7 +169,10 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `lib/app/router.dart` - GoRouter route definitions
 - `lib/app/theme.dart` - Material 3 theme configuration
 - `lib/core/platform/nfc_service.dart` - NFC abstraction interface
+- `lib/core/platform/fast_nfc_provider.dart` - Optimized NFC ComProvider (skips NDEF, custom haptic)
 - `lib/core/platform/secure_screen_service.dart` - FLAG_SECURE abstraction + MethodChannel impl (available, not active)
+- `lib/core/utils/country_code_utils.dart` - ISO 3166-1 alpha-3 → alpha-2 mapping (249+ countries)
+- `lib/app/theme_mode_provider.dart` - Dark/light mode toggle (Riverpod StateNotifier)
 - `lib/features/passport_reader/presentation/widgets/nfc_pulse_animation.dart` - Animated NFC pulse rings via CustomPainter
 - `lib/features/passport_reader/presentation/widgets/reading_step_indicator.dart` - 4-phase step indicator
 - `lib/features/passport_display/presentation/widgets/passport_header_card.dart` - Passport-style header with Hero photo

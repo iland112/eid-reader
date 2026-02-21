@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-02-22
+Last updated: 2026-02-21
 
 ## Overview
 
@@ -86,9 +86,31 @@ This document tracks what has been implemented and what remains.
 - **MRZ Camera Screen**: flashlight toggle button in AppBar
 - **MRZ Input Screen**: instruction card, grouped form card, button renamed "Scan Passport" with `Icons.contactless`
 
-### Test Suite (v0.2 + v0.3 + v0.4 + v0.5 + v0.7)
+### Dark Mode Theming (v0.8)
 
-- 171 tests across 16 test files (121 unit + 50 widget)
+- All hardcoded `Colors.*` replaced with Material 3 `ColorScheme` tokens
+- Affected: `passport_detail_screen.dart`, `expiry_date_badge.dart`, `nfc_pulse_animation.dart`, `reading_step_indicator.dart`, `nfc_scan_screen.dart`, `mrz_camera_screen.dart`
+- Key mappings: `Colors.black87` → `surfaceContainerHighest`, `Colors.greenAccent` → `primary`, `Colors.white` → `onSurface`/`onPrimary`, `Colors.yellowAccent` → `tertiary`
+- Dark/light mode toggle: `ThemeModeNotifier` (Riverpod `StateNotifier`) + `IconButton` in MRZ Input AppBar
+
+### App Icon & Country Flag Display (v0.8)
+
+- **App icon**: Custom icon from `assets/favicon.ico` via `flutter_launcher_icons` (adaptive icon for Android)
+- **App label**: `eid_reader` → `eID Reader` in AndroidManifest.xml
+- **Country flag**: `flutter_svg` renders flag SVGs in `PassportHeaderCard` nationality badge
+- **Country code mapping**: `CountryCodeUtils` — ISO 3166-1 alpha-3 → alpha-2 (249+ entries, ICAO-specific codes)
+- 12 new tests for `CountryCodeUtils`
+
+### NFC Connect Optimization (v0.8)
+
+- `FastNfcProvider`: custom `ComProvider` replacing dmrtd's `NfcProvider`
+- Skips NDEF discovery (`androidCheckNDEF: false`) — e-Passports don't use NDEF (~500ms savings)
+- Skips platform NFC sound (`androidPlatformSound: false`) — app provides custom haptic feedback
+- Supports ISO 14443A + 14443B for ICAO Doc 9303 compatibility
+
+### Test Suite (v0.2 + v0.3 + v0.4 + v0.5 + v0.7 + v0.8)
+
+- 183 tests across 17 test files (133 unit + 50 widget)
 - Manual mock pattern (no mockito codegen due to analyzer incompatibility)
 - Widget tests for all 4 screens (MrzInput, MrzCamera, NfcScan, PassportDetail)
 - See [testing.md](testing.md) for details
