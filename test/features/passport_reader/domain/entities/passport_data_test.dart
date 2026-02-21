@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:eid_reader/features/passport_reader/domain/entities/pa_verification_result.dart';
 import 'package:eid_reader/features/passport_reader/domain/entities/passport_data.dart';
 
 PassportData _createPassportData({
@@ -93,6 +94,74 @@ void main() {
       final a = _createPassportData(authProtocol: 'BAC');
       final b = _createPassportData(authProtocol: 'PACE');
       expect(a, isNot(equals(b)));
+    });
+
+    test('defaults paVerificationResult to null', () {
+      final data = _createPassportData();
+      expect(data.paVerificationResult, isNull);
+    });
+
+    test('equality considers paVerificationResult', () {
+      final a = _createPassportData();
+      final b = a.copyWith(
+        paVerificationResult:
+            const PaVerificationResult(status: 'VALID'),
+      );
+      expect(a, isNot(equals(b)));
+    });
+
+    test('copyWith preserves unchanged fields', () {
+      final original = _createPassportData(
+        surname: 'DOE',
+        givenNames: 'JOHN',
+        authProtocol: 'PACE',
+      );
+      final copy = original.copyWith(passiveAuthValid: true);
+      expect(copy.surname, 'DOE');
+      expect(copy.givenNames, 'JOHN');
+      expect(copy.authProtocol, 'PACE');
+      expect(copy.passiveAuthValid, true);
+    });
+
+    test('copyWith updates passiveAuthValid and paVerificationResult', () {
+      final original = _createPassportData();
+      const paResult = PaVerificationResult(status: 'VALID');
+      final copy = original.copyWith(
+        passiveAuthValid: true,
+        paVerificationResult: paResult,
+      );
+      expect(copy.passiveAuthValid, true);
+      expect(copy.paVerificationResult, paResult);
+    });
+
+    test('copyWith updates all fields', () {
+      final original = _createPassportData();
+      final copy = original.copyWith(
+        surname: 'SMITH',
+        givenNames: 'JANE',
+        documentNumber: 'X1234567',
+        nationality: 'GBR',
+        dateOfBirth: '850315',
+        sex: 'F',
+        dateOfExpiry: '350315',
+        issuingState: 'GBR',
+        documentType: 'P',
+        passiveAuthValid: true,
+        activeAuthValid: true,
+        authProtocol: 'PACE',
+      );
+      expect(copy.surname, 'SMITH');
+      expect(copy.givenNames, 'JANE');
+      expect(copy.documentNumber, 'X1234567');
+      expect(copy.nationality, 'GBR');
+      expect(copy.dateOfBirth, '850315');
+      expect(copy.sex, 'F');
+      expect(copy.dateOfExpiry, '350315');
+      expect(copy.issuingState, 'GBR');
+      expect(copy.documentType, 'P');
+      expect(copy.passiveAuthValid, true);
+      expect(copy.activeAuthValid, true);
+      expect(copy.authProtocol, 'PACE');
     });
   });
 }

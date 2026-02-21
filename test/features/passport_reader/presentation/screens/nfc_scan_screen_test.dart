@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:eid_reader/features/mrz_input/domain/entities/mrz_data.dart';
 import 'package:eid_reader/features/passport_reader/data/datasources/passport_datasource.dart';
+import 'package:eid_reader/features/passport_reader/data/datasources/passport_read_result.dart';
 import 'package:eid_reader/features/passport_reader/domain/entities/passport_data.dart';
 import 'package:eid_reader/features/passport_reader/presentation/providers/passport_reader_provider.dart';
 import 'package:eid_reader/features/passport_reader/presentation/screens/nfc_scan_screen.dart';
@@ -30,9 +32,16 @@ const _testPassportData = PassportData(
   authProtocol: 'BAC',
 );
 
+final _testReadResult = PassportReadResult(
+  passportData: _testPassportData,
+  sodBytes: Uint8List.fromList([1, 2, 3]),
+  dg1Bytes: Uint8List.fromList([4, 5, 6]),
+  dg2Bytes: Uint8List.fromList([7, 8, 9]),
+);
+
 /// A mock datasource that uses Completer for fine-grained control.
 class MockPassportDatasource implements PassportDatasource {
-  PassportData? _result;
+  PassportReadResult? _result;
   Object? _error;
   Completer<void>? _blocker;
 
@@ -43,8 +52,8 @@ class MockPassportDatasource implements PassportDatasource {
     _error = null;
   }
 
-  void mockSuccess(PassportData data) {
-    _result = data;
+  void mockSuccess(PassportReadResult result) {
+    _result = result;
     _error = null;
     _blocker = null;
   }
@@ -56,7 +65,7 @@ class MockPassportDatasource implements PassportDatasource {
   }
 
   @override
-  Future<PassportData> readPassport(MrzData mrzData) async {
+  Future<PassportReadResult> readPassport(MrzData mrzData) async {
     if (_blocker != null) {
       await _blocker!.future;
     }
@@ -212,7 +221,7 @@ void main() {
     });
 
     testWidgets('navigates to passport-detail on success', (tester) async {
-      final mock = MockPassportDatasource()..mockSuccess(_testPassportData);
+      final mock = MockPassportDatasource()..mockSuccess(_testReadResult);
 
       await tester.pumpWidget(_buildTestApp(datasource: mock));
       await tester.pump();
@@ -235,7 +244,7 @@ void main() {
       expect(find.text('Try Again'), findsOneWidget);
 
       // Now mock success for retry
-      mock.mockSuccess(_testPassportData);
+      mock.mockSuccess(_testReadResult);
 
       await tester.tap(find.text('Try Again'));
       await tester.pumpAndSettle();

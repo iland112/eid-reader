@@ -121,9 +121,53 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen> {
                       : 'Failed',
             ),
             _buildInfoRow('Protocol', widget.passportData.authProtocol),
+
+            // PA Verification Details
+            if (widget.passportData.paVerificationResult != null) ...[
+              const SizedBox(height: 16),
+              _buildSectionHeader(context, 'PA Verification Details'),
+              _buildPaDetails(context),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPaDetails(BuildContext context) {
+    final pa = widget.passportData.paVerificationResult!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildInfoRow(
+          'Certificate Chain',
+          pa.certificateChainValid == true ? 'Valid' : 'Invalid',
+        ),
+        if (pa.dscSubject != null)
+          _buildInfoRow('DSC Subject', pa.dscSubject!),
+        if (pa.cscaSubject != null)
+          _buildInfoRow('CSCA Subject', pa.cscaSubject!),
+        if (pa.crlStatus != null)
+          _buildInfoRow('CRL Status', pa.crlStatus!),
+        _buildInfoRow(
+          'SOD Signature',
+          pa.sodSignatureValid == true ? 'Valid' : 'Invalid',
+        ),
+        if (pa.signatureAlgorithm != null)
+          _buildInfoRow('Algorithm', pa.signatureAlgorithm!),
+        if (pa.totalGroups != null)
+          _buildInfoRow(
+            'Data Groups',
+            '${pa.validGroups ?? 0}/${pa.totalGroups} valid',
+          ),
+        if (pa.processingDurationMs != null)
+          _buildInfoRow(
+            'Verification Time',
+            '${pa.processingDurationMs}ms',
+          ),
+        if (pa.errorMessage != null)
+          _buildInfoRow('Error', pa.errorMessage!),
+      ],
     );
   }
 

@@ -97,8 +97,15 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
       case ReadingStep.authenticating:
       case ReadingStep.readingDg1:
       case ReadingStep.readingDg2:
+      case ReadingStep.readingSod:
         return Icon(
           Icons.nfc,
+          size: 96,
+          color: Theme.of(context).colorScheme.primary,
+        );
+      case ReadingStep.verifyingPa:
+        return Icon(
+          Icons.verified_user,
           size: 96,
           color: Theme.of(context).colorScheme.primary,
         );
@@ -130,6 +137,10 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
         message = 'Reading personal data...';
       case ReadingStep.readingDg2:
         message = 'Reading face image...';
+      case ReadingStep.readingSod:
+        message = 'Reading security data...';
+      case ReadingStep.verifyingPa:
+        message = 'Verifying document authenticity...';
       case ReadingStep.done:
         message = 'Reading complete!';
       case ReadingStep.error:

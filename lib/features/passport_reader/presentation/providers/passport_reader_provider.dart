@@ -1,9 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 
 import '../../../mrz_input/domain/entities/mrz_data.dart';
+import '../../data/datasources/http_pa_service.dart';
 import '../../data/datasources/nfc_passport_datasource.dart';
+import '../../data/datasources/pa_service.dart';
 import '../../data/datasources/passport_datasource.dart';
 import '../../domain/entities/passport_data.dart';
+
+final _log = Logger('PassportReaderNotifier');
 
 /// Reading progress state.
 enum ReadingStep {
@@ -12,6 +17,8 @@ enum ReadingStep {
   authenticating,
   readingDg1,
   readingDg2,
+  readingSod,
+  verifyingPa,
   done,
   error,
 }
@@ -42,9 +49,13 @@ class PassportReaderState {
 
 class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
   final PassportDatasource _datasource;
+  final PaService? _paService;
 
-  PassportReaderNotifier({PassportDatasource? datasource})
-      : _datasource = datasource ?? NfcPassportDatasource(),
+  PassportReaderNotifier({
+    PassportDatasource? datasource,
+    PaService? paService,
+  })  : _datasource = datasource ?? NfcPassportDatasource(),
+        _paService = paService,
         super(const PassportReaderState());
 
   Future<void> readPassport(MrzData mrzData) async {
@@ -52,7 +63,31 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
 
     try {
       state = state.copyWith(step: ReadingStep.authenticating);
-      final passportData = await _datasource.readPassport(mrzData);
+      final readResult = await _datasource.readPassport(mrzData);
+
+      // PA verification (optional - only if PaService is configured)
+      var passportData = readResult.passportData;
+      if (_paService != null &&
+          readResult.sodBytes.isNotEmpty &&
+          readResult.dg1Bytes.isNotEmpty) {
+        state = state.copyWith(step: ReadingStep.verifyingPa);
+        try {
+          final paResult = await _paService.verify(
+            sodBytes: readResult.sodBytes,
+            dg1Bytes: readResult.dg1Bytes,
+            dg2Bytes: readResult.dg2Bytes,
+            issuingCountry: passportData.issuingState,
+            documentNumber: passportData.documentNumber,
+          );
+          passportData = passportData.copyWith(
+            passiveAuthValid: paResult.isValid,
+            paVerificationResult: paResult,
+          );
+        } catch (e) {
+          _log.warning('PA verification failed: $e');
+        }
+      }
+
       state = PassportReaderState(
         step: ReadingStep.done,
         data: passportData,
@@ -85,7 +120,20 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
   }
 }
 
+/// PA Service base URL provider. Override for custom server address.
+final paServiceBaseUrlProvider = Provider<String>((ref) {
+  return 'http://10.0.2.2:8080';
+});
+
+/// PA Service provider. Returns null if base URL is empty.
+final paServiceProvider = Provider<PaService?>((ref) {
+  final baseUrl = ref.watch(paServiceBaseUrlProvider);
+  if (baseUrl.isEmpty) return null;
+  return HttpPaService(baseUrl: baseUrl);
+});
+
 final passportReaderProvider =
     StateNotifierProvider<PassportReaderNotifier, PassportReaderState>((ref) {
-  return PassportReaderNotifier();
+  final paService = ref.watch(paServiceProvider);
+  return PassportReaderNotifier(paService: paService);
 });

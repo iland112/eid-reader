@@ -2,8 +2,8 @@
 
 ## Overview
 
-- **Total tests**: 139
-- **Test files**: 14 (10 unit + 4 widget)
+- **Total tests**: 172
+- **Test files**: 16 (12 unit + 4 widget)
 - **Framework**: `flutter_test`
 - **Mock strategy**: Manual mocks (no mockito codegen)
 - **CI command**: `flutter test`
@@ -122,27 +122,62 @@ Tests MRZ camera scanning state management with mock `TextRecognitionService`.
 
 ### Feature: Passport Reader
 
-#### `test/features/passport_reader/domain/entities/passport_data_test.dart` (8 tests)
+#### `test/features/passport_reader/domain/entities/passport_data_test.dart` (13 tests)
 
 | Test | Description |
 |---|---|
-| Default values | `faceImageBytes` null, `authProtocol` is `'unknown'` |
+| Default values | `faceImageBytes` null, `authProtocol` is `'BAC'` |
 | fullName | `'$givenNames $surname'` format |
 | Equality | Ignores `faceImageBytes` (excluded from Equatable props) |
 | Inequality | Different field values are not equal |
-| Props count | Correct number of props |
-| copyWith | Works for all fields |
+| paVerificationResult default | Defaults to null |
+| paVerificationResult equality | Different PA results are not equal |
+| copyWith preserves fields | Unchanged fields preserved on copy |
+| copyWith PA result | Updates passiveAuthValid and paVerificationResult |
+| copyWith all fields | All fields updatable |
+| authProtocol equality | BAC != PACE |
 | const constructor | Compiles with const |
-| All fields | Non-default values round-trip correctly |
+| faceImageBytes default | Defaults to null |
+| Equality same values | Two identical instances are equal |
 
-#### `test/features/passport_reader/presentation/providers/passport_reader_provider_test.dart` (20 tests)
+#### `test/features/passport_reader/domain/entities/pa_verification_result_test.dart` (10 tests)
+
+| Test | Description |
+|---|---|
+| isValid VALID | Returns true for 'VALID' status |
+| isValid INVALID | Returns false for 'INVALID' status |
+| isValid ERROR | Returns false for 'ERROR' status |
+| fromJson VALID | Parses full VALID response with all nested objects |
+| fromJson INVALID | Parses INVALID response with cert chain failure |
+| fromJson error response | Handles `success: false` with error message |
+| fromJson missing nested | Handles missing nested objects gracefully |
+| error factory | Creates ERROR result with error message |
+| Equality same | Two identical instances are equal |
+| Equality different | Different values are not equal |
+
+#### `test/features/passport_reader/data/datasources/http_pa_service_test.dart` (8 tests)
+
+| Test | Description |
+|---|---|
+| Request body | Sends correct Base64 encoded SOD/DG1/DG2 + metadata |
+| Optional fields | Omits issuingCountry/documentNumber when null |
+| VALID response | Parses successful PA verification response |
+| API error | Handles `success: false` error response |
+| HTTP error | Handles non-200 status codes |
+| Network error | Handles ClientException with error result |
+| URL construction | Sends request to correct `/api/pa/verify` URL |
+| Content-Type | Sets `application/json` header |
+
+#### `test/features/passport_reader/presentation/providers/passport_reader_provider_test.dart` (24 tests)
 
 | Group | Tests |
 |---|---|
 | PassportReaderState | Default values, copyWith, errorMessage reset |
-| ReadingStep | 7 enum values (idle, connecting, authenticating, readingDg1, readingDg2, done, error) |
+| ReadingStep | 9 enum values (idle, connecting, authenticating, readingDg1, readingDg2, readingSod, verifyingPa, done, error) |
 | PassportReaderNotifier | Initial state, reset |
 | With mock datasource | Success flow, TagLost error, auth failure, timeout, generic error, reset after read |
+| With PA service | PA success → passiveAuthValid=true, PA INVALID → false, PA failure → graceful, skips PA when SOD empty |
+| Without PA service | Works without PA service (null) |
 
 ### Widget: MRZ Input Screen
 
@@ -201,7 +236,7 @@ blocking "in progress" state tests.
 
 ### Widget: Passport Detail Screen
 
-#### `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` (14 tests)
+#### `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` (18 tests)
 
 Uses `MockSecureScreenService` to verify FLAG_SECURE calls and
 `Navigator.pushReplacement` to test dispose behavior.
@@ -221,7 +256,10 @@ Uses `MockSecureScreenService` to verify FLAG_SECURE calls and
 | Dispose cleanup | Calls `disableSecureMode()` + zeroes face buffer |
 | Section headers | All 3 section headers render |
 | Field labels | All 11 field labels render |
-| All fields | Renders all passport data values |
+| No PA details | Hides PA section when no PA result |
+| PA details section | Shows 'PA Verification Details' header with PA result |
+| PA cert chain details | Shows cert chain, SOD sig, DG hash, timing |
+| PA error message | Shows error message for failed PA verification |
 
 ## Running Tests
 

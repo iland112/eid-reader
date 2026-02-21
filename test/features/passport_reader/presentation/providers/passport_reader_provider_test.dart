@@ -1,18 +1,23 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:eid_reader/features/mrz_input/domain/entities/mrz_data.dart';
+import 'package:eid_reader/features/passport_reader/data/datasources/pa_service.dart';
 import 'package:eid_reader/features/passport_reader/data/datasources/passport_datasource.dart';
+import 'package:eid_reader/features/passport_reader/data/datasources/passport_read_result.dart';
+import 'package:eid_reader/features/passport_reader/domain/entities/pa_verification_result.dart';
 import 'package:eid_reader/features/passport_reader/domain/entities/passport_data.dart';
 import 'package:eid_reader/features/passport_reader/presentation/providers/passport_reader_provider.dart';
 
-/// Manual mock for [PassportDatasource] to avoid build_runner dependency.
+/// Manual mock for [PassportDatasource] returning [PassportReadResult].
 class MockPassportDatasource implements PassportDatasource {
-  PassportData? _result;
+  PassportReadResult? _result;
   Object? _error;
 
-  void mockSuccess(PassportData data) {
-    _result = data;
+  void mockSuccess(PassportReadResult result) {
+    _result = result;
     _error = null;
   }
 
@@ -22,7 +27,35 @@ class MockPassportDatasource implements PassportDatasource {
   }
 
   @override
-  Future<PassportData> readPassport(MrzData mrzData) async {
+  Future<PassportReadResult> readPassport(MrzData mrzData) async {
+    if (_error != null) throw _error!;
+    return _result!;
+  }
+}
+
+/// Manual mock for [PaService].
+class MockPaService implements PaService {
+  PaVerificationResult? _result;
+  Object? _error;
+
+  void mockSuccess(PaVerificationResult result) {
+    _result = result;
+    _error = null;
+  }
+
+  void mockError(Object error) {
+    _error = error;
+    _result = null;
+  }
+
+  @override
+  Future<PaVerificationResult> verify({
+    required Uint8List sodBytes,
+    required Uint8List dg1Bytes,
+    required Uint8List dg2Bytes,
+    String? issuingCountry,
+    String? documentNumber,
+  }) async {
     if (_error != null) throw _error!;
     return _result!;
   }
@@ -45,6 +78,13 @@ const _testPassportData = PassportData(
   issuingState: 'USA',
   documentType: 'P',
   authProtocol: 'BAC',
+);
+
+final _testReadResult = PassportReadResult(
+  passportData: _testPassportData,
+  sodBytes: Uint8List.fromList([1, 2, 3]),
+  dg1Bytes: Uint8List.fromList([4, 5, 6]),
+  dg2Bytes: Uint8List.fromList([7, 8, 9]),
 );
 
 void main() {
@@ -81,13 +121,15 @@ void main() {
         ReadingStep.authenticating,
         ReadingStep.readingDg1,
         ReadingStep.readingDg2,
+        ReadingStep.readingSod,
+        ReadingStep.verifyingPa,
         ReadingStep.done,
         ReadingStep.error,
       ]));
     });
 
-    test('has 7 values total', () {
-      expect(ReadingStep.values.length, 7);
+    test('has 9 values total', () {
+      expect(ReadingStep.values.length, 9);
     });
   });
 
@@ -128,12 +170,12 @@ void main() {
     });
 
     test('readPassport sets done state on success', () async {
-      mockDatasource.mockSuccess(_testPassportData);
+      mockDatasource.mockSuccess(_testReadResult);
 
       await notifier.readPassport(_testMrzData);
 
       expect(notifier.state.step, ReadingStep.done);
-      expect(notifier.state.data, _testPassportData);
+      expect(notifier.state.data?.documentNumber, 'L898902C');
       expect(notifier.state.errorMessage, isNull);
     });
 
@@ -175,7 +217,7 @@ void main() {
     });
 
     test('reset after readPassport clears state', () async {
-      mockDatasource.mockSuccess(_testPassportData);
+      mockDatasource.mockSuccess(_testReadResult);
 
       await notifier.readPassport(_testMrzData);
       expect(notifier.state.step, ReadingStep.done);
@@ -183,6 +225,108 @@ void main() {
       notifier.reset();
       expect(notifier.state.step, ReadingStep.idle);
       expect(notifier.state.data, isNull);
+    });
+  });
+
+  group('PassportReaderNotifier with PA service', () {
+    late MockPassportDatasource mockDatasource;
+    late MockPaService mockPaService;
+    late PassportReaderNotifier notifier;
+
+    setUp(() {
+      mockDatasource = MockPassportDatasource();
+      mockPaService = MockPaService();
+      notifier = PassportReaderNotifier(
+        datasource: mockDatasource,
+        paService: mockPaService,
+      );
+    });
+
+    test('PA verification success sets passiveAuthValid to true', () async {
+      mockDatasource.mockSuccess(_testReadResult);
+      mockPaService.mockSuccess(const PaVerificationResult(
+        status: 'VALID',
+        verificationId: 'test-uuid',
+        certificateChainValid: true,
+        sodSignatureValid: true,
+        totalGroups: 2,
+        validGroups: 2,
+        invalidGroups: 0,
+      ));
+
+      await notifier.readPassport(_testMrzData);
+
+      expect(notifier.state.step, ReadingStep.done);
+      expect(notifier.state.data?.passiveAuthValid, true);
+      expect(notifier.state.data?.paVerificationResult?.isValid, true);
+      expect(
+        notifier.state.data?.paVerificationResult?.verificationId,
+        'test-uuid',
+      );
+    });
+
+    test('PA verification INVALID sets passiveAuthValid to false', () async {
+      mockDatasource.mockSuccess(_testReadResult);
+      mockPaService.mockSuccess(const PaVerificationResult(
+        status: 'INVALID',
+        certificateChainValid: false,
+      ));
+
+      await notifier.readPassport(_testMrzData);
+
+      expect(notifier.state.step, ReadingStep.done);
+      expect(notifier.state.data?.passiveAuthValid, false);
+      expect(notifier.state.data?.paVerificationResult?.isValid, false);
+    });
+
+    test('PA verification failure does not block passport reading', () async {
+      mockDatasource.mockSuccess(_testReadResult);
+      mockPaService.mockError(Exception('Network timeout'));
+
+      await notifier.readPassport(_testMrzData);
+
+      expect(notifier.state.step, ReadingStep.done);
+      expect(notifier.state.data?.passiveAuthValid, false);
+      expect(notifier.state.data?.paVerificationResult, isNull);
+      expect(notifier.state.data?.documentNumber, 'L898902C');
+    });
+
+    test('skips PA when SOD bytes are empty', () async {
+      final readResultNoSod = PassportReadResult(
+        passportData: _testPassportData,
+        sodBytes: Uint8List(0),
+        dg1Bytes: Uint8List.fromList([4, 5, 6]),
+        dg2Bytes: Uint8List.fromList([7, 8, 9]),
+      );
+      mockDatasource.mockSuccess(readResultNoSod);
+      mockPaService.mockSuccess(const PaVerificationResult(status: 'VALID'));
+
+      await notifier.readPassport(_testMrzData);
+
+      expect(notifier.state.step, ReadingStep.done);
+      // PA should be skipped because SOD is empty
+      expect(notifier.state.data?.passiveAuthValid, false);
+      expect(notifier.state.data?.paVerificationResult, isNull);
+    });
+  });
+
+  group('PassportReaderNotifier without PA service', () {
+    late MockPassportDatasource mockDatasource;
+    late PassportReaderNotifier notifier;
+
+    setUp(() {
+      mockDatasource = MockPassportDatasource();
+      notifier = PassportReaderNotifier(datasource: mockDatasource);
+    });
+
+    test('works without PA service (null)', () async {
+      mockDatasource.mockSuccess(_testReadResult);
+
+      await notifier.readPassport(_testMrzData);
+
+      expect(notifier.state.step, ReadingStep.done);
+      expect(notifier.state.data?.passiveAuthValid, false);
+      expect(notifier.state.data?.paVerificationResult, isNull);
     });
   });
 }

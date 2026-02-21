@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 import '../../../mrz_input/domain/entities/mrz_data.dart';
 import '../../domain/entities/passport_data.dart';
 import 'passport_datasource.dart';
+import 'passport_read_result.dart';
 
 final _log = Logger('NfcPassportDatasource');
 
@@ -34,9 +35,9 @@ class NfcPassportDatasource implements PassportDatasource {
   /// Reads passport data using NFC.
   ///
   /// Attempts PACE first, falls back to BAC if not supported.
-  /// Reads DG1 (MRZ biographical data) and DG2 (face image).
+  /// Reads DG1, DG2, and SOD (for Passive Authentication).
   @override
-  Future<PassportData> readPassport(MrzData mrzData) async {
+  Future<PassportReadResult> readPassport(MrzData mrzData) async {
     String authProtocol = 'BAC';
 
     try {
@@ -75,15 +76,28 @@ class NfcPassportDatasource implements PassportDatasource {
       // Read DG1 (MRZ data)
       _log.info('Reading DG1...');
       final dg1 = await passport.readEfDG1();
+      final dg1Bytes = dg1.toBytes();
 
       // Read DG2 (face image) if available
       _log.info('Reading DG2...');
       Uint8List? faceImageBytes;
+      Uint8List dg2Bytes = Uint8List(0);
       try {
         final dg2 = await passport.readEfDG2();
         faceImageBytes = dg2.imageData;
+        dg2Bytes = dg2.toBytes();
       } catch (e) {
         _log.warning('Could not read DG2: $e');
+      }
+
+      // Read SOD (Security Object Document) for Passive Authentication
+      _log.info('Reading SOD...');
+      Uint8List sodBytes = Uint8List(0);
+      try {
+        final sod = await passport.readEfSOD();
+        sodBytes = sod.toBytes();
+      } catch (e) {
+        _log.warning('Could not read SOD: $e');
       }
 
       // Disconnect
@@ -94,18 +108,23 @@ class NfcPassportDatasource implements PassportDatasource {
       // Parse MRZ from DG1
       final mrz = dg1.mrz;
 
-      return PassportData(
-        surname: mrz.lastName,
-        givenNames: mrz.firstName,
-        documentNumber: mrz.documentNumber,
-        nationality: mrz.nationality,
-        dateOfBirth: _formatYYMMDD(mrz.dateOfBirth),
-        sex: mrz.gender,
-        dateOfExpiry: _formatYYMMDD(mrz.dateOfExpiry),
-        issuingState: mrz.country,
-        documentType: mrz.documentCode,
-        faceImageBytes: faceImageBytes,
-        authProtocol: authProtocol,
+      return PassportReadResult(
+        passportData: PassportData(
+          surname: mrz.lastName,
+          givenNames: mrz.firstName,
+          documentNumber: mrz.documentNumber,
+          nationality: mrz.nationality,
+          dateOfBirth: _formatYYMMDD(mrz.dateOfBirth),
+          sex: mrz.gender,
+          dateOfExpiry: _formatYYMMDD(mrz.dateOfExpiry),
+          issuingState: mrz.country,
+          documentType: mrz.documentCode,
+          faceImageBytes: faceImageBytes,
+          authProtocol: authProtocol,
+        ),
+        sodBytes: sodBytes,
+        dg1Bytes: dg1Bytes,
+        dg2Bytes: dg2Bytes,
       );
     } catch (e) {
       _log.severe('Passport reading failed: $e');

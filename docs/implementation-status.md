@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-02-21
+Last updated: 2026-02-22
 
 ## Overview
 
@@ -55,12 +55,36 @@ This document tracks what has been implemented and what remains.
 - Navigation: MrzInputScreen → "Scan MRZ" button → `/mrz-camera` → pop(MrzData) → auto-fill fields
 - Android camera permission added to AndroidManifest.xml
 
-### Test Suite (v0.2 + v0.3 + v0.4)
+### Passive Authentication (v0.5)
 
-- 139 tests across 14 test files (97 unit + 42 widget)
+- PA Service REST API client integration (`POST /api/pa/verify`)
+- `PaVerificationResult` entity: structured 8-step verification results (Equatable)
+- `PassportReadResult` data class: wraps `PassportData` + raw SOD/DG1/DG2 bytes
+- `PaService` abstract interface + `HttpPaService` implementation (`http` package)
+- `NfcPassportDatasource`: reads EfSOD + preserves raw DG1/DG2 bytes via `toBytes()`
+- `PassportReaderNotifier`: orchestrates NFC read → PA API call → combined results
+- `ReadingStep` extended: `readingSod`, `verifyingPa` steps with UI feedback
+- `PassportDetailScreen`: PA Verification Details section (cert chain, SOD sig, DG hash, timing)
+- `PassportData.copyWith()` method for combining NFC read + PA results
+- PA verification is optional (graceful degradation if server unavailable or SOD empty)
+- Base URL configurable via `paServiceBaseUrlProvider` (Riverpod)
+
+### Test Suite (v0.2 + v0.3 + v0.4 + v0.5)
+
+- 172 tests across 16 test files (121 unit + 51 widget)
 - Manual mock pattern (no mockito codegen due to analyzer incompatibility)
 - Widget tests for all 4 screens (MrzInput, MrzCamera, NfcScan, PassportDetail)
 - See [testing.md](testing.md) for details
+
+### Android Deployment Config (v0.6)
+
+- `minSdk` raised from 21 → 24 (`flutter_nfc_kit` requires API 24+)
+- NFC permission added to `AndroidManifest.xml` (`android.permission.NFC`)
+- INTERNET permission added to main manifest (required for PA API communication)
+- `<uses-feature android:name="android.hardware.nfc" android:required="true" />`
+- `<uses-feature android:name="android.hardware.camera" android:required="false" />`
+- Debug APK build verified: `flutter build apk --debug` → 227MB
+- Target device: Galaxy A36 5G (Android 16, API 36)
 
 ### Infrastructure (v0.2)
 
@@ -73,7 +97,7 @@ This document tracks what has been implemented and what remains.
 | Feature | Priority | Notes |
 |---|---|---|
 | ~~MRZ Camera Scan~~ | ~~Medium~~ | DONE (v0.4) — google_mlkit_text_recognition + camera, TD3 parsing |
-| Passive Authentication | Medium | EfSOD signature verification (dmrtd `EfSOD` is currently a stub) |
+| ~~Passive Authentication~~ | ~~Medium~~ | DONE (v0.5) — PA Service REST API client, raw SOD/DG bytes, 8-step verification |
 | Active Authentication | Low | AA protocol (many passports don't support it) |
 | ~~Widget Tests~~ | ~~Medium~~ | DONE (v0.3) — 33 widget tests across 3 screens |
 | `@riverpod` Code Generation | Low | Migrate manual `StateNotifier` to `@riverpod` annotations |

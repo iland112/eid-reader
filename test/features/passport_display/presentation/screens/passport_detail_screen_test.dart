@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:eid_reader/core/platform/secure_screen_service.dart';
 import 'package:eid_reader/features/passport_display/presentation/screens/passport_detail_screen.dart';
+import 'package:eid_reader/features/passport_reader/domain/entities/pa_verification_result.dart';
 import 'package:eid_reader/features/passport_reader/domain/entities/passport_data.dart';
 
 const _testPassportData = PassportData(
@@ -306,6 +307,118 @@ void main() {
       expect(find.text('Passive Auth'), findsOneWidget);
       expect(find.text('Active Auth'), findsOneWidget);
       expect(find.text('Protocol'), findsOneWidget);
+    });
+
+    testWidgets('does not show PA details section when no PA result',
+        (tester) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          passportData: _testPassportData,
+          mockSecureService: mockSecureService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('PA Verification Details'), findsNothing);
+    });
+
+    testWidgets('shows PA Verification Details section when PA result present',
+        (tester) async {
+      const paResult = PaVerificationResult(
+        status: 'VALID',
+        verificationId: 'uuid-123',
+        processingDurationMs: 245,
+        certificateChainValid: true,
+        dscSubject: '/C=KR/CN=DSC 01',
+        cscaSubject: '/C=KR/CN=CSCA KR',
+        crlStatus: 'NOT_REVOKED',
+        sodSignatureValid: true,
+        signatureAlgorithm: 'SHA256withRSA',
+        totalGroups: 2,
+        validGroups: 2,
+        invalidGroups: 0,
+      );
+      final dataWithPa = _testPassportData.copyWith(
+        passiveAuthValid: true,
+        paVerificationResult: paResult,
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          passportData: dataWithPa,
+          mockSecureService: mockSecureService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('PA Verification Details'), findsOneWidget);
+      expect(find.text('Certificate Chain'), findsOneWidget);
+      expect(find.text('SOD Signature'), findsOneWidget);
+      expect(find.text('Data Groups'), findsOneWidget);
+      expect(find.text('Verification Time'), findsOneWidget);
+    });
+
+    testWidgets('shows PA certificate chain details', (tester) async {
+      const paResult = PaVerificationResult(
+        status: 'VALID',
+        certificateChainValid: true,
+        dscSubject: '/C=KR/CN=DSC 01',
+        cscaSubject: '/C=KR/CN=CSCA KR',
+        crlStatus: 'NOT_REVOKED',
+        sodSignatureValid: true,
+        signatureAlgorithm: 'SHA256withRSA',
+        totalGroups: 2,
+        validGroups: 2,
+        invalidGroups: 0,
+        processingDurationMs: 200,
+      );
+      final dataWithPa = _testPassportData.copyWith(
+        passiveAuthValid: true,
+        paVerificationResult: paResult,
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          passportData: dataWithPa,
+          mockSecureService: mockSecureService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Certificate chain
+      expect(find.text('Valid'), findsNWidgets(2)); // cert chain + SOD sig
+      expect(find.text('/C=KR/CN=DSC 01'), findsOneWidget);
+      expect(find.text('/C=KR/CN=CSCA KR'), findsOneWidget);
+      expect(find.text('NOT_REVOKED'), findsOneWidget);
+
+      // SOD signature
+      expect(find.text('SHA256withRSA'), findsOneWidget);
+
+      // Data groups
+      expect(find.text('2/2 valid'), findsOneWidget);
+
+      // Processing time
+      expect(find.text('200ms'), findsOneWidget);
+    });
+
+    testWidgets('shows PA error message when verification has error',
+        (tester) async {
+      final paResult = PaVerificationResult.error('SOD parsing failed');
+      final dataWithPa = _testPassportData.copyWith(
+        paVerificationResult: paResult,
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          passportData: dataWithPa,
+          mockSecureService: mockSecureService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('PA Verification Details'), findsOneWidget);
+      expect(find.text('Error'), findsOneWidget);
+      expect(find.text('SOD parsing failed'), findsOneWidget);
     });
   });
 }

@@ -7,7 +7,7 @@ Primary goal: Read e-Passport (ICAO 9303) chip data via NFC on Android.
 Future expansion: Windows and Linux desktop support via USB smart card readers.
 
 This is a security-sensitive application handling personal identity data (PII).
-All passport data stays in-memory only - never persisted to disk or transmitted over network.
+All passport data stays in-memory only - never persisted to disk. Network transmission only for PA verification.
 
 ## Development Environment
 
@@ -69,8 +69,9 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 |---|---|---|
 | State Management | `flutter_riverpod` + `riverpod_annotation` | With code generation (`riverpod_generator`) |
 | Navigation | `go_router` | Declarative, URL-based routing |
-| Passport Reading | `dmrtd` (git dep: ZeroPass/dmrtd) | ICAO 9303, BAC+PACE, DG1/DG2 |
+| Passport Reading | `dmrtd` (git dep: ZeroPass/dmrtd) | ICAO 9303, BAC+PACE, DG1/DG2/SOD |
 | NFC | `flutter_nfc_kit` | Direct dependency (also transitive via dmrtd) |
+| HTTP Client | `http` | PA Service REST API communication |
 | Camera | `camera` | Camera preview and image stream |
 | OCR | `google_mlkit_text_recognition` | ML Kit text recognition for MRZ scanning |
 | Permissions | `permission_handler` | Camera, NFC permissions |
@@ -103,7 +104,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 ### Security (Critical)
 - **NO persistent storage** of passport data. Memory only.
 - **NO logging of PII** (names, document numbers, dates, biometric data).
-- **NO network transmission** of passport data (v1 is fully offline).
+- **Network transmission**: Only to PA Service API for Passive Authentication verification (SOD + DG bytes). No external servers.
 - **NO secrets in Docker images** (keystores, signing keys).
 - **FLAG_SECURE** (IMPLEMENTED): `SecureScreenService` + `MainActivity.kt` MethodChannel on passport detail screen.
 - **Biometric buffer clearing** (IMPLEMENTED): `Uint8List.fillRange(0, length, 0)` in `PassportDetailScreen.dispose()`.
@@ -118,7 +119,18 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `DBAKey` constructor takes `(String docNum, DateTime dateOfBirth, DateTime dateOfExpiry)`.
 - `EfDG2.imageData` for face image bytes; `MRP.documentCode` for document type.
 - `MRP.dateOfBirth` / `MRP.dateOfExpiry` return `DateTime`, not `String`.
+- All EF classes (`EfDG1`, `EfDG2`, `EfSOD`) support `toBytes()` for raw byte access.
+- `EfSOD.parse()` is a stub (empty impl) but raw bytes are preserved via `ElementaryFile._encoded`.
 - See `docs/dmrtd-api-notes.md` for full API reference and common pitfalls.
+
+### Passive Authentication (PA)
+- PA verification via REST API: `POST /api/pa/verify` (see `docs/PA_API_GUIDE.md`)
+- `PaService` abstract interface + `HttpPaService` implementation (`http` package)
+- PA is optional: graceful degradation if server unavailable or SOD bytes empty
+- Base URL configurable via `paServiceBaseUrlProvider` (default: `http://10.0.2.2:8080`)
+- `PassportReadResult` carries raw SOD/DG1/DG2 bytes from NFC read to PA service
+- `PaVerificationResult` entity: 8-step verification results (cert chain, SOD sig, DG hash)
+- `PassportData.copyWith()` combines NFC read data with PA results
 
 ### Error Handling
 - Custom exceptions in `core/error/exceptions.dart`.
@@ -127,7 +139,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - Never expose raw exception messages to users.
 
 ### Testing
-- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **139 tests across 14 files.**
+- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **172 tests across 16 files.**
 - **Manual mock pattern** (no mockito codegen due to analyzer 7.x incompatibility).
 - Use Riverpod `ProviderContainer` overrides for dependency injection in tests.
 - For `MethodChannel` testing, use `TestDefaultBinaryMessengerBinding`.
@@ -155,9 +167,12 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `lib/app/theme.dart` - Material 3 theme configuration
 - `lib/core/platform/nfc_service.dart` - NFC abstraction interface
 - `lib/core/platform/secure_screen_service.dart` - FLAG_SECURE abstraction + MethodChannel impl
-- `lib/features/passport_reader/data/datasources/passport_datasource.dart` - Abstract datasource interface
-- `lib/features/passport_reader/data/datasources/nfc_passport_datasource.dart` - Core dmrtd integration
-- `lib/features/passport_reader/presentation/providers/passport_reader_provider.dart` - Notifier with DI support
+- `lib/features/passport_reader/data/datasources/passport_datasource.dart` - Abstract datasource interface (returns PassportReadResult)
+- `lib/features/passport_reader/data/datasources/nfc_passport_datasource.dart` - Core dmrtd integration (reads DG1/DG2/SOD)
+- `lib/features/passport_reader/data/datasources/pa_service.dart` - PA verification service interface
+- `lib/features/passport_reader/data/datasources/http_pa_service.dart` - HTTP PA Service REST API client
+- `lib/features/passport_reader/domain/entities/pa_verification_result.dart` - PA 8-step verification result entity
+- `lib/features/passport_reader/presentation/providers/passport_reader_provider.dart` - Notifier with NFC + PA orchestration
 - `lib/features/passport_display/presentation/screens/passport_detail_screen.dart` - Secure display with buffer clearing
 - `lib/features/mrz_input/domain/usecases/validate_mrz.dart` - ICAO 9303 MRZ validation
 - `lib/features/mrz_input/domain/usecases/parse_mrz_from_text.dart` - MRZ OCR text parser (TD3 format)
@@ -173,6 +188,16 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `docs/security.md` - Security architecture and measures
 - `docs/testing.md` - Test inventory and guide
 - `docs/dmrtd-api-notes.md` - dmrtd library API reference and pitfalls
+- `docs/PA_API_GUIDE.md` - PA Service REST API guide (8-step verification)
+
+## Android Build Config
+
+- **applicationId**: `com.smartcoreinc.eid_reader`
+- **minSdk**: 24 (required by `flutter_nfc_kit`)
+- **targetSdk**: Flutter default (`flutter.targetSdkVersion`)
+- **Permissions**: `CAMERA`, `NFC`, `INTERNET`
+- **Required hardware**: `android.hardware.nfc` (required=true), `android.hardware.camera` (required=false)
+- **Debug signing**: uses debug keys (release signing TODO)
 
 ## Commands
 
