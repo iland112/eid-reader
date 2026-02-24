@@ -146,4 +146,93 @@ void main() {
       );
     });
   });
+
+  group('ImageQualityAnalyzer.analyzeFromPixels', () {
+    test('uniform gray pixels have low blur and zero contrast', () {
+      const w = 100, h = 100;
+      final rgba = ByteData(w * h * 4);
+      for (int i = 0; i < w * h; i++) {
+        rgba.setUint8(i * 4, 128);
+        rgba.setUint8(i * 4 + 1, 128);
+        rgba.setUint8(i * 4 + 2, 128);
+        rgba.setUint8(i * 4 + 3, 255);
+      }
+      final metrics = analyzer.analyzeFromPixels(rgba, w, h);
+      expect(metrics.blurScore, lessThan(1));
+      expect(metrics.contrastRatio, equals(0));
+      expect(metrics.saturationStdDev, lessThan(0.01));
+    });
+
+    test('bright pixels have high glare ratio', () {
+      const w = 50, h = 50;
+      final rgba = ByteData(w * h * 4);
+      for (int i = 0; i < w * h; i++) {
+        rgba.setUint8(i * 4, 250);
+        rgba.setUint8(i * 4 + 1, 250);
+        rgba.setUint8(i * 4 + 2, 250);
+        rgba.setUint8(i * 4 + 3, 255);
+      }
+      final metrics = analyzer.analyzeFromPixels(rgba, w, h);
+      expect(metrics.glareRatio, greaterThan(0.9));
+    });
+
+    test('checkerboard pixels have high blur score', () {
+      const w = 100, h = 100;
+      final rgba = ByteData(w * h * 4);
+      for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+          final v = ((x + y) % 2 == 0) ? 0 : 255;
+          final off = (y * w + x) * 4;
+          rgba.setUint8(off, v);
+          rgba.setUint8(off + 1, v);
+          rgba.setUint8(off + 2, v);
+          rgba.setUint8(off + 3, 255);
+        }
+      }
+      final metrics = analyzer.analyzeFromPixels(rgba, w, h);
+      expect(metrics.blurScore, greaterThan(100));
+    });
+
+    test('black-and-white pixels have contrast ratio 1.0', () {
+      const w = 100, h = 100;
+      final rgba = ByteData(w * h * 4);
+      for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+          final v = x < 50 ? 0 : 255;
+          final off = (y * w + x) * 4;
+          rgba.setUint8(off, v);
+          rgba.setUint8(off + 1, v);
+          rgba.setUint8(off + 2, v);
+          rgba.setUint8(off + 3, 255);
+        }
+      }
+      final metrics = analyzer.analyzeFromPixels(rgba, w, h);
+      expect(metrics.contrastRatio, equals(1.0));
+    });
+
+    test('overall score is between 0 and 1', () {
+      const w = 50, h = 50;
+      final rgba = ByteData(w * h * 4);
+      for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+          final v = ((x + y) % 2 == 0) ? 50 : 200;
+          final off = (y * w + x) * 4;
+          rgba.setUint8(off, v);
+          rgba.setUint8(off + 1, v);
+          rgba.setUint8(off + 2, v);
+          rgba.setUint8(off + 3, 255);
+        }
+      }
+      final metrics = analyzer.analyzeFromPixels(rgba, w, h);
+      expect(metrics.overallScore, greaterThanOrEqualTo(0));
+      expect(metrics.overallScore, lessThanOrEqualTo(1));
+    });
+
+    test('empty image returns zero scores', () {
+      final rgba = ByteData(0);
+      final metrics = analyzer.analyzeFromPixels(rgba, 0, 0);
+      expect(metrics.overallScore, equals(0));
+      expect(metrics.issues, contains('Empty image'));
+    });
+  });
 }

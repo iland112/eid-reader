@@ -1,14 +1,18 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../app/theme_mode_provider.dart';
+import '../../../../core/services/debug_log_service.dart';
 import '../../domain/entities/mrz_data.dart';
 import '../../domain/usecases/validate_mrz.dart';
 import '../providers/mrz_input_provider.dart';
+import '../widgets/viz_scan_result_card.dart';
 
 class MrzInputScreen extends ConsumerStatefulWidget {
   const MrzInputScreen({super.key});
@@ -44,6 +48,16 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
     }
   }
 
+  Future<void> _shareLogFile() async {
+    final path = DebugLogService.instance.logFilePath;
+    if (path == null) return;
+    await DebugLogService.instance.flush();
+    await Share.shareXFiles(
+      [XFile(path)],
+      text: 'eID Reader debug log',
+    );
+  }
+
   void _onReadPassport() {
     if (!_formKey.currentState!.validate()) return;
 
@@ -57,6 +71,12 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
       appBar: AppBar(
         title: const Text('eID Reader'),
         actions: [
+          if (kDebugMode)
+            IconButton(
+              icon: const Icon(Icons.share),
+              tooltip: 'Share debug log',
+              onPressed: _shareLogFile,
+            ),
           IconButton(
             icon: Icon(
               Theme.of(context).brightness == Brightness.dark
@@ -78,54 +98,28 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Instruction card
-              Card(
-                elevation: 0,
-                color: Theme.of(context)
-                    .colorScheme
-                    .primaryContainer
-                    .withValues(alpha: 0.3),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.credit_card,
-                        size: 48,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Enter Passport MRZ Data',
-                        style:
-                            Theme.of(context).textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _isDesktop
-                            ? 'Enter the three data fields from your passport\'s '
-                              'machine-readable zone.'
-                            : 'Enter the three data fields from your passport\'s '
-                              'machine-readable zone, or scan them with your camera.',
-                        style:
-                            Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+              // VIZ scan result or instruction text
+              if (ref.watch(mrzInputProvider).cameraMrzData != null)
+                VizScanResultCard(
+                    mrzData: ref.watch(mrzInputProvider).cameraMrzData!)
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    _isDesktop
+                        ? 'Enter passport MRZ data to read the '
+                          'e-Passport chip.'
+                        : 'Scan the passport VIZ, or enter MRZ '
+                          'data manually.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant,
+                        ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
               // Form fields in a card
               Card(
@@ -200,7 +194,7 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
                 OutlinedButton.icon(
                   onPressed: _onScanMrz,
                   icon: const Icon(Icons.camera_alt),
-                  label: const Text('Scan MRZ'),
+                  label: const Text('Scan VIZ'),
                 ),
                 const SizedBox(height: 12),
               ],

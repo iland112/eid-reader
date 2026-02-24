@@ -40,6 +40,14 @@ class VerifyViz {
   VerifyViz({required FaceEmbeddingService embeddingService})
       : _embeddingService = embeddingService;
 
+  /// Preloads the face embedding model so it's ready for comparison.
+  /// Fire-and-forget — safe to call without awaiting.
+  void preloadModel() {
+    _embeddingService.preload().catchError((e) {
+      _log.warning('Model preload failed: $e');
+    });
+  }
+
   /// Executes VIZ-chip verification.
   ///
   /// [vizCapture] - VIZ face image + quality metrics from camera.

@@ -25,6 +25,9 @@ class MockFaceEmbeddingService implements FaceEmbeddingService {
   }
 
   @override
+  Future<void> preload() async {}
+
+  @override
   void close() {}
 }
 

@@ -133,7 +133,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - PA verification via REST API: `POST /api/pa/verify` (see `docs/PA_API_GUIDE.md`)
 - `PaService` abstract interface + `HttpPaService` implementation (`http` package)
 - PA is optional: graceful degradation if server unavailable or SOD bytes empty
-- Base URL configurable via `paServiceBaseUrlProvider` (default: `http://10.0.2.2:8080`)
+- Base URL configurable via `paServiceBaseUrlProvider` (default: `http://192.168.1.70:8080` — Luckfox WiFi SC-WiFi)
 - `PassportReadResult` carries raw SOD/DG1/DG2 bytes from NFC read to PA service
 - `PaVerificationResult` entity: 8-step verification results (cert chain, SOD sig, DG hash)
 - `PassportData.copyWith()` combines NFC read data with PA results
@@ -145,7 +145,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - Never expose raw exception messages to users.
 
 ### Testing
-- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **351 tests across 30 files.**
+- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **399 tests across 35 files.**
 - **Manual mock pattern** (no mockito codegen due to analyzer 7.x incompatibility).
 - Use Riverpod `ProviderContainer` overrides for dependency injection in tests.
 - For `MethodChannel` testing, use `TestDefaultBinaryMessengerBinding`.
@@ -204,6 +204,8 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `lib/features/passport_display/presentation/widgets/face_comparison_badge.dart` - Face match status badge
 - `lib/features/mrz_input/domain/usecases/mrz_ocr_corrector.dart` - Position-aware MRZ OCR character correction
 - `lib/core/utils/icao_codes.dart` - ICAO state code validation + single-char OCR correction
+- `lib/core/utils/nv21_utils.dart` - NV21 ROI cropping for MRZ region (rotation-aware, stride-aware)
+- `lib/core/services/debug_log_service.dart` - Debug log file output + in-memory ring buffer for on-device overlay
 - `lib/features/passport_reader/domain/entities/mrz_field_comparison.dart` - Per-field OCR vs chip comparison entity
 - `android/app/src/main/kotlin/com/smartcoreinc/eid_reader/MainActivity.kt` - Native FLAG_SECURE handler
 - `.devcontainer/Dockerfile` - Development environment

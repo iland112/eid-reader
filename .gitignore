@@ -53,3 +53,6 @@ coverage/
 *.g.dart
 *.freezed.dart
 *.mocks.dart
+
+# Local dmrtd fork
+dmrtd-fork/

@@ -66,6 +66,138 @@ void main() {
       final result = corrector.correctLine1(input);
       expect(result, input);
     });
+
+    test('replaces runs of 3+ identical non-< chars with fillers', () {
+      // KKKKKK in filler region → <<<<<<  (44 chars in, 44 chars out)
+      const input  = 'P<KORJUNG<<KYUNG<BAE<<<<<<KKKKKK<<<<<<<<<<<<';
+      final result = corrector.correctLine1(input);
+      expect(result, 'P<KORJUNG<<KYUNG<BAE<<<<<<<<<<<<<<<<<<<<<<<<');
+      expect(result.length, 44);
+    });
+
+    test('replaces isolated single char surrounded by fillers', () {
+      // X at end of line after <<< → < (isolated noise at end of string)
+      const input  = 'P<UTODOE<<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<<<<X';
+      final result = corrector.correctLine1(input);
+      expect(result.contains('X'), isFalse);
+      expect(result.length, 44);
+    });
+
+    test('preserves real double-letter names', () {
+      // 'LL' in a name should NOT be replaced (only 3+ triggers)
+      const input = 'P<UTOMCCALL<<JOHN<WILLIAM<<<<<<<<<<<<<<<<<<<';
+      final result = corrector.correctLine1(input);
+      expect(result.contains('LL'), isTrue);
+    });
+
+    test('cleans mixed filler noise from OCR', () {
+      // Real-world: <<<<<<XXXXXX<<<<<<<<<<<<X → all fillers
+      const input  = 'P<UTODOE<<JOHN<<<<<<<<<<<<XXXXXX<<<<<<<<<<<<X';
+      final result = corrector.correctLine1(input);
+      expect(result.contains('XXXXXX'), isFalse);
+      expect(result.contains('X'), isFalse);
+    });
+
+    test('preserves document subtype per ICAO 9303 (position 1)', () {
+      // ICAO 9303 Part 4 §4.2.2: Position 1 is at issuing State discretion.
+      // Valid subtypes: P< (regular), PM (Korea), PD (diplomatic),
+      // PO (official), PS (service), etc.
+
+      // PM — Korean passport
+      const inputPM = 'PMKORJUNG<<KYUNG<BAE<<<<<<<<<<<<<<<<<<<<<<<';
+      final resultPM = corrector.correctLine1(inputPM);
+      expect(resultPM[0], 'P');
+      expect(resultPM[1], 'M');
+      expect(resultPM.substring(2, 5), 'KOR');
+      expect(resultPM, inputPM);
+
+      // PD — Diplomatic passport
+      const inputPD = 'PDGBRDOE<<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<';
+      final resultPD = corrector.correctLine1(inputPD);
+      expect(resultPD[1], 'D');
+      expect(resultPD.substring(2, 5), 'GBR');
+
+      // PO — Official passport
+      const inputPO = 'PODEUDOE<<JANE<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<';
+      final resultPO = corrector.correctLine1(inputPO);
+      expect(resultPO[1], 'O');
+
+      // PS — Service passport
+      const inputPS = 'PSFRADUPONT<<MARIE<<<<<<<<<<<<<<<<<<<<<<<<<';
+      final resultPS = corrector.correctLine1(inputPS);
+      expect(resultPS[1], 'S');
+
+      // P< — Regular passport (filler preserved)
+      const inputPC = 'P<KORJUNG<<KYUNG<BAE<<<<<<<<<<<<<<<<<<<<<<<';
+      final resultPC = corrector.correctLine1(inputPC);
+      expect(resultPC[1], '<');
+      expect(resultPC, inputPC);
+    });
+
+    test('corrects digit in subtype position to alpha', () {
+      // OCR might read PO as P0 (zero instead of O)
+      const input = 'P0GBRDOE<<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<';
+      final result = corrector.correctLine1(input);
+      expect(result[1], 'O'); // 0 → O via _digitToAlpha
+      expect(result.substring(0, 2), 'PO');
+    });
+
+    test('replaces K between fillers (< misread as K)', () {
+      // <K< pattern: K between fillers → filler
+      const input  = 'P<KORJUNG<<KYUNG<BAE<<K<K<K<K<K<K<K<K<K<K<K<';
+      final result = corrector.correctLine1(input);
+      expect(result, 'P<KORJUNG<<KYUNG<BAE<<<<<<<<<<<<<<<<<<<<<<<<');
+    });
+
+    test('replaces KK between fillers', () {
+      // <KK< pattern: consecutive Ks between fillers → fillers
+      const input  = 'P<KORJUNG<<KYUNG<BAE<<KK<<<<<<<<<<<<<<<<<<<';
+      final result = corrector.correctLine1(input);
+      expect(result, 'P<KORJUNG<<KYUNG<BAE<<<<<<<<<<<<<<<<<<<<<<<');
+    });
+
+    test('preserves K in valid name positions', () {
+      // K in KYUNG must not be replaced (middle of name, not trailing)
+      const input = 'P<KORJUNG<<KYUNG<BAE<<<<<<<<<<<<<<<<<<<<<<<';
+      final result = corrector.correctLine1(input);
+      expect(result, input);
+      expect(result.contains('KYUNG'), isTrue);
+      expect(result.contains('JUNG'), isTrue);
+    });
+
+    test('handles mixed K and filler noise at end', () {
+      // After Pass 1 (KKK→<<<), remaining K in filler region should be cleaned
+      const input  = 'P<KORJUNG<<KYUNG<BAE<<KKKK<K<K<<<<<<<<<<<<<';
+      final result = corrector.correctLine1(input);
+      expect(result, 'P<KORJUNG<<KYUNG<BAE<<<<<<<<<<<<<<<<<<<<<<<');
+    });
+
+    test('converts trailing K fillers (< misread as K)', () {
+      // Most common real-world case: OCR reads trailing < as K
+      // Name is BAE, all trailing < read as K
+      // 20 chars + 24 Ks = 44
+      const input  = 'PMKORJUNG<<KYUNG<BAEKKKKKKKKKKKKKKKKKKKKKKKK';
+      final result = corrector.correctLine1(input);
+      // 20 chars + 24 <s = 44
+      expect(result, 'PMKORJUNG<<KYUNG<BAE<<<<<<<<<<<<<<<<<<<<<<<<');
+      expect(result.contains('BAE'), isTrue);
+      expect(result.contains('KYUNG'), isTrue);
+    });
+
+    test('converts trailing K fillers with mixed <K< pattern', () {
+      // OCR reads some < correctly and some as K
+      const input  = 'PMKORJUNG<<KYUNG<BAE<<K<KKKKK<K<<<<<<<<<<<<<';
+      final result = corrector.correctLine1(input);
+      expect(result, 'PMKORJUNG<<KYUNG<BAE<<<<<<<<<<<<<<<<<<<<<<<<');
+    });
+
+    test('converts all-K trailing fillers for non-K-ending name', () {
+      // Name ends with N (non-K), all trailing < as K
+      const input  = 'P<UTODOE<<JOHNKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK';
+      final result = corrector.correctLine1(input);
+      // Phase 0 converts consecutive trailing Ks, stops at N
+      expect(result, 'P<UTODOE<<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<');
+    });
   });
 
   group('MrzOcrCorrector Line 2', () {

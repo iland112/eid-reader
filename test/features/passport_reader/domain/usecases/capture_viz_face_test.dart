@@ -14,16 +14,9 @@ class MockFaceDetectionService implements FaceDetectionService {
   List<Rect> facesToReturn = [];
   int detectCallCount = 0;
 
-  /// Per-call results for testing retry logic.
-  /// When set, overrides [facesToReturn] based on call index.
-  List<List<Rect>>? facesSequence;
-
   @override
   Future<List<Rect>> detectFaces(InputImage image) async {
-    final index = detectCallCount++;
-    if (facesSequence != null && index < facesSequence!.length) {
-      return facesSequence![index];
-    }
+    detectCallCount++;
     return facesToReturn;
   }
 
@@ -43,6 +36,12 @@ class MockImageQualityAnalyzer implements ImageQualityAnalyzer {
 
   @override
   ImageQualityMetrics analyze(Uint8List imageBytes) {
+    return metricsToReturn;
+  }
+
+  @override
+  ImageQualityMetrics analyzeFromPixels(
+      ByteData rgbaPixels, int width, int height) {
     return metricsToReturn;
   }
 }
@@ -226,35 +225,7 @@ void main() {
       expect(result, isNotNull);
     });
 
-    test('retries with contrast enhancement when first attempt fails',
-        () async {
-      // First call: no faces; second call (enhanced): face found
-      mockFaceDetection.facesSequence = [
-        [], // first attempt
-        [const Rect.fromLTWH(50, 60, 80, 100)], // retry with enhancement
-      ];
-      final imageBytes = _createTestJpeg();
-      final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
-        metadata: InputImageMetadata(
-          size: const Size(200, 300),
-          rotation: InputImageRotation.rotation0deg,
-          format: InputImageFormat.nv21,
-          bytesPerRow: 200,
-        ),
-      );
-
-      final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
-        inputImage: inputImage,
-      );
-
-      expect(result, isNotNull);
-      expect(result!.vizFaceImageBytes, isNotEmpty);
-      expect(mockFaceDetection.detectCallCount, 2);
-    });
-
-    test('does not retry when first attempt succeeds', () async {
+    test('calls face detection exactly once', () async {
       mockFaceDetection.facesToReturn = [
         const Rect.fromLTWH(50, 60, 80, 100),
       ];
@@ -278,12 +249,8 @@ void main() {
       expect(mockFaceDetection.detectCallCount, 1);
     });
 
-    test('returns null when both attempts fail', () async {
-      // Both calls return empty
-      mockFaceDetection.facesSequence = [
-        [], // first attempt
-        [], // retry with enhancement
-      ];
+    test('returns null immediately when no faces detected', () async {
+      mockFaceDetection.facesToReturn = [];
       final imageBytes = _createTestJpeg();
       final inputImage = InputImage.fromBytes(
         bytes: imageBytes,
@@ -301,7 +268,197 @@ void main() {
       );
 
       expect(result, isNull);
-      expect(mockFaceDetection.detectCallCount, 2);
+      expect(mockFaceDetection.detectCallCount, 1);
+    });
+  });
+
+  group('CaptureVizFace with previewFaceRect', () {
+    test('skips ML Kit when previewFaceRect is provided', () async {
+      // ML Kit should NOT be called when preview face rect is given
+      mockFaceDetection.facesToReturn = [
+        const Rect.fromLTWH(10, 10, 20, 20),
+      ];
+      final imageBytes = _createTestJpeg();
+      final inputImage = InputImage.fromBytes(
+        bytes: imageBytes,
+        metadata: InputImageMetadata(
+          size: const Size(200, 300),
+          rotation: InputImageRotation.rotation0deg,
+          format: InputImageFormat.nv21,
+          bytesPerRow: 200,
+        ),
+      );
+
+      final result = await captureVizFace.execute(
+        imageBytes: imageBytes,
+        inputImage: inputImage,
+        previewFaceRect: const Rect.fromLTWH(50, 60, 80, 100),
+        previewSize: const Size(200, 300),
+      );
+
+      expect(result, isNotNull);
+      expect(mockFaceDetection.detectCallCount, 0);
+    });
+
+    test('scales preview rect to full image coordinates', () async {
+      // Preview is 100x150, full image is 200x300 → scale 2x
+      final imageBytes = _createTestJpeg(width: 200, height: 300);
+      final inputImage = InputImage.fromBytes(
+        bytes: imageBytes,
+        metadata: InputImageMetadata(
+          size: const Size(200, 300),
+          rotation: InputImageRotation.rotation0deg,
+          format: InputImageFormat.nv21,
+          bytesPerRow: 200,
+        ),
+      );
+
+      final result = await captureVizFace.execute(
+        imageBytes: imageBytes,
+        inputImage: inputImage,
+        previewFaceRect: const Rect.fromLTWH(25, 30, 40, 50),
+        previewSize: const Size(100, 150),
+      );
+
+      expect(result, isNotNull);
+      expect(mockFaceDetection.detectCallCount, 0);
+    });
+
+    test('falls back to ML Kit when scaled rect is out of bounds', () async {
+      mockFaceDetection.facesToReturn = [
+        const Rect.fromLTWH(50, 60, 80, 100),
+      ];
+      final imageBytes = _createTestJpeg(width: 200, height: 300);
+      final inputImage = InputImage.fromBytes(
+        bytes: imageBytes,
+        metadata: InputImageMetadata(
+          size: const Size(200, 300),
+          rotation: InputImageRotation.rotation0deg,
+          format: InputImageFormat.nv21,
+          bytesPerRow: 200,
+        ),
+      );
+
+      // Preview rect that will scale way out of bounds
+      final result = await captureVizFace.execute(
+        imageBytes: imageBytes,
+        inputImage: inputImage,
+        previewFaceRect: const Rect.fromLTWH(500, 600, 80, 100),
+        previewSize: const Size(100, 100),
+      );
+
+      expect(result, isNotNull);
+      expect(mockFaceDetection.detectCallCount, 1); // Fallback to ML Kit
+    });
+
+    test('falls back to ML Kit when previewSize is null', () async {
+      mockFaceDetection.facesToReturn = [
+        const Rect.fromLTWH(50, 60, 80, 100),
+      ];
+      final imageBytes = _createTestJpeg();
+      final inputImage = InputImage.fromBytes(
+        bytes: imageBytes,
+        metadata: InputImageMetadata(
+          size: const Size(200, 300),
+          rotation: InputImageRotation.rotation0deg,
+          format: InputImageFormat.nv21,
+          bytesPerRow: 200,
+        ),
+      );
+
+      final result = await captureVizFace.execute(
+        imageBytes: imageBytes,
+        inputImage: inputImage,
+        previewFaceRect: const Rect.fromLTWH(50, 60, 80, 100),
+        // previewSize is null → should use ML Kit
+      );
+
+      expect(result, isNotNull);
+      expect(mockFaceDetection.detectCallCount, 1);
+    });
+
+    test('prefers left-side face over similar-sized right-side face (ghost image)', () async {
+      // Simulate polycarbonate passport with ghost image:
+      // Main photo (left, 40x50) vs ghost image (right, slightly larger 42x52)
+      // In a 200-wide image: main center X = 30 (15%), ghost center X = 160 (80%)
+      // Without position bias: ghost wins (2184 > 2000)
+      // With position bias: main = 2000*1.5 = 3000, ghost = 2184*1.0 → main wins
+      mockFaceDetection.facesToReturn = [
+        const Rect.fromLTWH(10, 100, 40, 50),   // main photo (left)
+        const Rect.fromLTWH(139, 100, 42, 52),  // ghost image (right, slightly larger)
+      ];
+      final imageBytes = _createTestJpeg();
+      final inputImage = InputImage.fromBytes(
+        bytes: imageBytes,
+        metadata: InputImageMetadata(
+          size: const Size(200, 300),
+          rotation: InputImageRotation.rotation0deg,
+          format: InputImageFormat.nv21,
+          bytesPerRow: 200,
+        ),
+      );
+
+      final result = await captureVizFace.execute(
+        imageBytes: imageBytes,
+        inputImage: inputImage,
+      );
+
+      expect(result, isNotNull);
+      // Should select the left face (main photo), not the ghost
+      expect(result!.faceBoundingBox.left, 10);
+    });
+
+    test('selects right-side face when it is much larger (no ghost)', () async {
+      // If the right-side face is >1.5x larger, it should still win
+      // (e.g., the passport is flipped or it's genuinely the main face)
+      mockFaceDetection.facesToReturn = [
+        const Rect.fromLTWH(10, 100, 20, 25),   // small left face (area 500)
+        const Rect.fromLTWH(120, 100, 60, 80),  // large right face (area 4800)
+      ];
+      // score: left = 500*1.5 = 750, right = 4800*1.0 = 4800 → right wins
+      final imageBytes = _createTestJpeg();
+      final inputImage = InputImage.fromBytes(
+        bytes: imageBytes,
+        metadata: InputImageMetadata(
+          size: const Size(200, 300),
+          rotation: InputImageRotation.rotation0deg,
+          format: InputImageFormat.nv21,
+          bytesPerRow: 200,
+        ),
+      );
+
+      final result = await captureVizFace.execute(
+        imageBytes: imageBytes,
+        inputImage: inputImage,
+      );
+
+      expect(result, isNotNull);
+      // Right face is >1.5x larger, so it wins despite position
+      expect(result!.faceBoundingBox.left, 120);
+    });
+
+    test('returns null when fallback ML Kit finds no faces', () async {
+      mockFaceDetection.facesToReturn = []; // No faces
+      final imageBytes = _createTestJpeg(width: 200, height: 300);
+      final inputImage = InputImage.fromBytes(
+        bytes: imageBytes,
+        metadata: InputImageMetadata(
+          size: const Size(200, 300),
+          rotation: InputImageRotation.rotation0deg,
+          format: InputImageFormat.nv21,
+          bytesPerRow: 200,
+        ),
+      );
+
+      // Out of bounds → fallback → no faces
+      final result = await captureVizFace.execute(
+        imageBytes: imageBytes,
+        inputImage: inputImage,
+        previewFaceRect: const Rect.fromLTWH(500, 600, 80, 100),
+        previewSize: const Size(100, 100),
+      );
+
+      expect(result, isNull);
     });
   });
 }

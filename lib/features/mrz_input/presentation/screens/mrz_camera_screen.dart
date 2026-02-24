@@ -1,15 +1,23 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:logging/logging.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'package:share_plus/share_plus.dart';
+
+import '../../../../core/services/debug_log_service.dart';
 import '../../../../core/utils/mrz_utils.dart';
+import '../../../../core/utils/nv21_utils.dart';
 import '../../domain/entities/mrz_data.dart';
 import '../providers/mrz_camera_provider.dart';
+
+final _log = Logger('MrzCameraScreen');
 
 class MrzCameraScreen extends ConsumerStatefulWidget {
   const MrzCameraScreen({super.key});
@@ -28,9 +36,19 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
   bool _isTorchOn = false;
   bool _isCapturingViz = false;
 
+  // Cached last preview frame for VIZ face pre-detection (Step 2 optimization)
+  Uint8List? _lastPreviewNv21;
+  int _lastPreviewWidth = 0;
+  int _lastPreviewHeight = 0;
+  bool _showDebugLog = false;
+  bool _cropDiagLogged = false;
+  final ScrollController _logScrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
+    // Lock to portrait only — landscape causes rotation/layout issues
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     _initCamera();
   }
 
@@ -64,12 +82,19 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
 
       _cameraController = CameraController(
         backCamera,
-        ResolutionPreset.high,
+        ResolutionPreset.veryHigh,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.nv21,
       );
 
       await _cameraController!.initialize();
+
+      // Enable continuous autofocus (also activates OIS on supported hardware)
+      try {
+        await _cameraController!.setFocusMode(FocusMode.auto);
+      } catch (_) {
+        // Not all devices support setFocusMode
+      }
 
       if (!mounted) return;
 
@@ -102,9 +127,31 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
     try {
       final notifier = ref.read(mrzCameraProvider.notifier);
 
-      // Build InputImage from camera frame
+      // Build InputImage from camera frame (includes MRZ ROI crop)
       final inputImage = _buildInputImage(image);
-      if (inputImage == null) return;
+      if (inputImage == null) {
+        _log.fine('Frame skipped: _buildInputImage returned null');
+        return;
+      }
+
+      // Cache un-cropped NV21 for preview face detection (only after first
+      // MRZ candidate to avoid unnecessary copies).
+      final frameCount = ref.read(mrzCameraProvider).debugFrameCount;
+      if (frameCount > 0) {
+        final Uint8List nv21;
+        if (image.format.group == ImageFormatGroup.nv21) {
+          nv21 = image.planes.first.bytes;
+        } else if (image.format.group == ImageFormatGroup.yuv420) {
+          nv21 = _yuv420ToNv21(image);
+        } else {
+          nv21 = Uint8List(0);
+        }
+        if (nv21.isNotEmpty) {
+          _lastPreviewNv21 = Uint8List.fromList(nv21);
+          _lastPreviewWidth = image.width;
+          _lastPreviewHeight = image.height;
+        }
+      }
 
       await notifier.processImage(inputImage);
 
@@ -113,6 +160,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
       if (state.detectedMrz != null &&
           state.vizCaptureStatus == VizCaptureStatus.idle &&
           !_isCapturingViz) {
+        _log.info('MRZ detected, triggering VIZ capture');
         _captureVizFromStill();
       }
     } finally {
@@ -124,14 +172,93 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
   Future<void> _captureVizFromStill() async {
     if (_cameraController == null || _isCapturingViz) return;
     _isCapturingViz = true;
+    final sw = Stopwatch()..start();
 
     try {
-      // Stop the image stream before taking a picture
+      // Capture device orientation BEFORE stopping the stream, so we
+      // know which way the device was held at capture time.
+      final sensorOrientation =
+          _cameraController!.description.sensorOrientation;
+      final deviceOrientation = _cameraController!.value.deviceOrientation;
+      final deviceDegrees = _deviceOrientationDegrees(deviceOrientation);
+      final rotationCompensation =
+          (sensorOrientation - deviceDegrees + 360) % 360;
+      _log.info(
+        'VIZ capture: sensor=$sensorOrientation, device=$deviceDegrees, '
+        'rotation=$rotationCompensation',
+      );
+
+      // Stop the image stream before taking a picture.
       await _cameraController!.stopImageStream();
       _isStreamActive = false;
 
+      // Run preview-frame face detection IN PARALLEL with the 300ms
+      // stabilization delay — effectively free face pre-detection.
+      Rect? previewFaceRect;
+      Size? previewSize;
+      final rotationValue =
+          InputImageRotationValue.fromRawValue(rotationCompensation);
+
+      if (_lastPreviewNv21 != null && rotationValue != null) {
+        // InputImageMetadata.size must describe the RAW buffer layout
+        // (before rotation). ML Kit uses this + bytesPerRow to read pixels.
+        final rawSize = Size(
+          _lastPreviewWidth.toDouble(),
+          _lastPreviewHeight.toDouble(),
+        );
+        // previewSize describes the ROTATED coordinate system that ML Kit
+        // returns face coordinates in. For 90°/270°, width and height swap.
+        final bool swapDims =
+            rotationCompensation == 90 || rotationCompensation == 270;
+        previewSize = Size(
+          swapDims
+              ? _lastPreviewHeight.toDouble()
+              : _lastPreviewWidth.toDouble(),
+          swapDims
+              ? _lastPreviewWidth.toDouble()
+              : _lastPreviewHeight.toDouble(),
+        );
+        final previewInputImage = InputImage.fromBytes(
+          bytes: _lastPreviewNv21!,
+          metadata: InputImageMetadata(
+            size: rawSize,
+            rotation: rotationValue,
+            format: InputImageFormat.nv21,
+            bytesPerRow: _lastPreviewWidth,
+          ),
+        );
+        final faceService = ref.read(faceDetectionServiceProvider);
+        if (faceService != null) {
+          final results = await Future.wait([
+            faceService.detectFaces(previewInputImage),
+            Future.delayed(const Duration(milliseconds: 300)),
+          ]);
+          final faceRects = results[0] as List<Rect>;
+          if (faceRects.isNotEmpty) {
+            previewFaceRect =
+                _selectMainFace(faceRects, imageWidth: previewSize.width);
+            _log.info(
+              'VIZ capture: preview face pre-detected at '
+              '${previewFaceRect.left.toInt()},${previewFaceRect.top.toInt()} '
+              '${previewFaceRect.width.toInt()}x${previewFaceRect.height.toInt()} '
+              '(${sw.elapsedMilliseconds}ms)',
+            );
+          }
+        } else {
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+        _lastPreviewNv21 = null; // Free memory
+      } else {
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
+      _log.fine('VIZ capture: stream stopped (${sw.elapsedMilliseconds}ms)');
+
       final xFile = await _cameraController!.takePicture();
       final imageBytes = await File(xFile.path).readAsBytes();
+      _log.info(
+        'VIZ capture: picture taken, ${imageBytes.length} bytes '
+        '(${sw.elapsedMilliseconds}ms)',
+      );
 
       // Build InputImage from the still file
       final inputImage = InputImage.fromFilePath(xFile.path);
@@ -140,17 +267,28 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
       await notifier.captureViz(
         imageBytes: Uint8List.fromList(imageBytes),
         inputImage: inputImage,
+        rotationCompensation: rotationCompensation,
+        previewFaceRect: previewFaceRect,
+        previewSize: previewSize,
       );
+
+      _log.info('VIZ capture: completed (${sw.elapsedMilliseconds}ms)');
 
       // Clean up the temp file
       try {
         await File(xFile.path).delete();
       } catch (_) {}
-    } catch (e) {
-      // VIZ capture failure is non-fatal; MRZ data is still usable
-      if (mounted) {
-        setState(() {});
-      }
+    } catch (e, st) {
+      _log.warning(
+        'VIZ capture: FAILED after ${sw.elapsedMilliseconds}ms',
+        e,
+        st,
+      );
+      // VIZ capture failure is non-fatal; ensure status reflects failure
+      // so the UI doesn't get stuck with a disabled button.
+      try {
+        ref.read(mrzCameraProvider.notifier).markVizError();
+      } catch (_) {}
     } finally {
       _isCapturingViz = false;
     }
@@ -161,27 +299,65 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
 
     final sensorOrientation =
         _cameraController!.description.sensorOrientation;
-    final rotation = InputImageRotationValue.fromRawValue(sensorOrientation);
+
+    // Compensate for current device orientation so ML Kit receives
+    // correctly-oriented image metadata regardless of portrait/landscape.
+    final deviceOrientation = _cameraController!.value.deviceOrientation;
+    final deviceDegrees = _deviceOrientationDegrees(deviceOrientation);
+    final rotationDegrees =
+        (sensorOrientation - deviceDegrees + 360) % 360;
+    final rotation = InputImageRotationValue.fromRawValue(rotationDegrees);
     if (rotation == null) return null;
 
     // ML Kit fromBytes only works reliably with NV21 on Android.
     // If camera returns YUV420, convert to NV21 first.
     final Uint8List nv21Bytes;
+    final int srcStride;
     if (image.format.group == ImageFormatGroup.nv21) {
       nv21Bytes = image.planes.first.bytes;
+      srcStride = image.planes.first.bytesPerRow;
     } else if (image.format.group == ImageFormatGroup.yuv420) {
       nv21Bytes = _yuv420ToNv21(image);
+      srcStride = image.width; // tightly packed by conversion
     } else {
       return null;
     }
 
+    // Crop to MRZ region (bottom ~50% of user-visible image) to reduce
+    // OCR processing time and improve recognition accuracy.
+    final cropped = cropNv21ForMrz(
+      nv21Bytes: nv21Bytes,
+      width: image.width,
+      height: image.height,
+      rotationDegrees: rotationDegrees,
+      srcStride: srcStride,
+    );
+
+    // One-time diagnostic log for crop debugging
+    if (!_cropDiagLogged) {
+      _cropDiagLogged = true;
+      _log.info(
+        'MRZ crop diag: '
+        'fmt=${image.format.group}, '
+        'planes=${image.planes.length}, '
+        'bytesPerRow=${image.planes.first.bytesPerRow}, '
+        'raw=${image.width}x${image.height}, '
+        'sensor=$sensorOrientation, device=$deviceDegrees, '
+        'rotation=$rotationDegrees, '
+        'buf=${nv21Bytes.length}, '
+        'expected=${srcStride * image.height * 3 ~/ 2}, '
+        'crop=${cropped.width}x${cropped.height} '
+        '(${cropped.bytes.length} bytes)',
+      );
+    }
+
     return InputImage.fromBytes(
-      bytes: nv21Bytes,
+      bytes: cropped.bytes,
       metadata: InputImageMetadata(
-        size: Size(image.width.toDouble(), image.height.toDouble()),
+        size: Size(cropped.width.toDouble(), cropped.height.toDouble()),
         rotation: rotation,
         format: InputImageFormat.nv21,
-        bytesPerRow: image.width,
+        bytesPerRow: cropped.width,
       ),
     );
   }
@@ -224,9 +400,44 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
     return nv21;
   }
 
+  /// Selects the main passport photo face, preferring faces in the left
+  /// portion of the image (ICAO 9303: main photo is always on the left).
+  static Rect _selectMainFace(List<Rect> faces, {required double imageWidth}) {
+    if (faces.length == 1) return faces.first;
+
+    Rect best = faces.first;
+    double bestScore = -1;
+
+    for (final face in faces) {
+      final area = face.width * face.height;
+      final centerX = face.left + face.width / 2;
+      final multiplier = (centerX / imageWidth) < 0.4 ? 1.5 : 1.0;
+      final score = area * multiplier;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = face;
+      }
+    }
+
+    return best;
+  }
+
+  static int _deviceOrientationDegrees(DeviceOrientation orientation) {
+    switch (orientation) {
+      case DeviceOrientation.portraitUp:
+        return 0;
+      case DeviceOrientation.landscapeLeft:
+        return 90;
+      case DeviceOrientation.portraitDown:
+        return 180;
+      case DeviceOrientation.landscapeRight:
+        return 270;
+    }
+  }
+
   bool _isVizCapturing(MrzCameraState cameraState) {
-    return cameraState.vizCaptureStatus == VizCaptureStatus.idle ||
-        cameraState.vizCaptureStatus == VizCaptureStatus.detectingFace;
+    return cameraState.vizCaptureStatus == VizCaptureStatus.detectingFace;
   }
 
   void _onUseData(MrzData data) {
@@ -248,10 +459,26 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
     }
   }
 
+  Future<void> _shareLogFile() async {
+    final path = DebugLogService.instance.logFilePath;
+    if (path == null) return;
+
+    // Flush pending writes before sharing
+    await DebugLogService.instance.flush();
+
+    await Share.shareXFiles(
+      [XFile(path)],
+      text: 'eID Reader debug log',
+    );
+  }
+
   @override
   void dispose() {
+    _logScrollController.dispose();
     _cameraController?.stopImageStream().catchError((_) {});
     _cameraController?.dispose();
+    // Restore all orientations when leaving this screen
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     super.dispose();
   }
 
@@ -263,6 +490,14 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
       appBar: AppBar(
         title: const Text('Scan Passport'),
         actions: [
+          if (kDebugMode)
+            IconButton(
+              icon: Icon(
+                _showDebugLog ? Icons.bug_report : Icons.bug_report_outlined,
+              ),
+              tooltip: _showDebugLog ? 'Hide debug log' : 'Show debug log',
+              onPressed: () => setState(() => _showDebugLog = !_showDebugLog),
+            ),
           if (_isInitialized)
             IconButton(
               icon: Icon(_isTorchOn ? Icons.flash_on : Icons.flash_off),
@@ -274,7 +509,12 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
       body: Column(
         children: [
           Expanded(
-            child: _buildCameraPreview(),
+            child: Stack(
+              children: [
+                _buildCameraPreview(),
+                if (_showDebugLog) _buildDebugLogOverlay(),
+              ],
+            ),
           ),
           _buildBottomPanel(cameraState),
         ],
@@ -320,59 +560,174 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
       );
     }
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        CameraPreview(_cameraController!),
-        _buildOverlay(),
-      ],
+    // Show camera preview at native aspect ratio (no stretching).
+    // Use FittedBox with BoxFit.cover to fill the available space
+    // while preserving aspect ratio, then clip the overflow.
+    final previewAspect = _cameraController!.value.aspectRatio;
+    return ClipRect(
+      child: OverflowBox(
+        alignment: Alignment.center,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: 1,
+                height: previewAspect,
+                child: CameraPreview(_cameraController!),
+              ),
+            ),
+            _buildOverlay(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDebugLogOverlay() {
+    return Positioned.fill(
+      child: ValueListenableBuilder<List<String>>(
+        valueListenable: DebugLogService.instance.logs,
+        builder: (context, logLines, _) {
+          // Auto-scroll to bottom after frame renders
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_logScrollController.hasClients) {
+              _logScrollController.jumpTo(
+                _logScrollController.position.maxScrollExtent,
+              );
+            }
+          });
+
+          return Container(
+            color: Colors.black.withValues(alpha: 0.75),
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with log file path + share button
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Log: ${DebugLogService.instance.logFilePath ?? "N/A"}',
+                        style: const TextStyle(
+                          color: Colors.yellow,
+                          fontSize: 8,
+                          fontFamily: 'monospace',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: _shareLogFile,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4),
+                        child: Icon(
+                          Icons.share,
+                          color: Colors.yellow,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(color: Colors.white24, height: 8),
+                // Scrollable log lines
+                Expanded(
+                  child: ListView.builder(
+                    controller: _logScrollController,
+                    itemCount: logLines.length,
+                    itemBuilder: (context, index) {
+                      return Text(
+                        logLines[index],
+                        style: const TextStyle(
+                          color: Colors.greenAccent,
+                          fontSize: 8,
+                          fontFamily: 'monospace',
+                          height: 1.3,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
   Widget _buildOverlay() {
-    return CustomPaint(
-      painter: _PassportOverlayPainter(),
-      child: Center(
-        child: SizedBox(
-          width: 320,
-          height: 200,
-          child: DecoratedBox(
-            decoration: const BoxDecoration(
-              border: Border.fromBorderSide(
-                BorderSide(
-                  color: Colors.white70,
-                  width: 2,
-                ),
-              ),
-              borderRadius: BorderRadius.all(Radius.circular(8)),
-            ),
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 4),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // ID-3 passport data page is always landscape: 125mm × 88mm.
+        // The VIZ guide box is always a landscape rectangle regardless
+        // of device orientation. In portrait mode it appears as a smaller
+        // horizontal rectangle; in landscape mode it fills more of the screen.
+        const passportAspect = 88.0 / 125.0; // height/width ≈ 0.70
+        final maxHeight = constraints.maxHeight - 32;
+        final maxWidth = constraints.maxWidth - 32;
+
+        // Start from max width (passport is landscape = wider than tall),
+        // then constrain by available height if needed.
+        var boxWidth = maxWidth;
+        var boxHeight = boxWidth * passportAspect;
+        if (boxHeight > maxHeight) {
+          boxHeight = maxHeight;
+          boxWidth = boxHeight / passportAspect;
+        }
+
+        return CustomPaint(
+          painter: _PassportOverlayPainter(
+            boxWidth: boxWidth,
+            boxHeight: boxHeight,
+          ),
+          child: Center(
+            child: SizedBox(
+              width: boxWidth,
+              height: boxHeight,
+              child: DecoratedBox(
                 decoration: const BoxDecoration(
-                  color: Colors.black38,
-                  borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(6),
-                    bottomRight: Radius.circular(6),
+                  border: Border.fromBorderSide(
+                    BorderSide(
+                      color: Colors.white70,
+                      width: 2,
+                    ),
                   ),
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
                 ),
-                child: const Text(
-                  'MRZ',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    decoration: const BoxDecoration(
+                      color: Colors.black38,
+                      borderRadius: BorderRadius.only(
+                        bottomLeft: Radius.circular(6),
+                        bottomRight: Radius.circular(6),
+                      ),
+                    ),
+                    child: const Text(
+                      'VIZ',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 2,
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -400,28 +755,6 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
           style: Theme.of(context).textTheme.bodyMedium,
           textAlign: TextAlign.center,
         ),
-        // Debug OCR output
-        if (cameraState.debugOcrText != null) ...[
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              cameraState.debugOcrText!,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 10,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              maxLines: 8,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -676,6 +1009,11 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
 
 /// Paints a semi-transparent overlay with a clear window for passport page scanning.
 class _PassportOverlayPainter extends CustomPainter {
+  final double boxWidth;
+  final double boxHeight;
+
+  _PassportOverlayPainter({required this.boxWidth, required this.boxHeight});
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = Colors.black54;
@@ -684,14 +1022,15 @@ class _PassportOverlayPainter extends CustomPainter {
     final overlayPath = Path()
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
 
-    // Cut out the passport page window (larger than MRZ-only)
+    // Cut out the passport page window
     final windowRect = Rect.fromCenter(
       center: Offset(size.width / 2, size.height / 2),
-      width: 320,
-      height: 200,
+      width: boxWidth,
+      height: boxHeight,
     );
     final windowPath = Path()
-      ..addRRect(RRect.fromRectAndRadius(windowRect, const Radius.circular(8)));
+      ..addRRect(
+          RRect.fromRectAndRadius(windowRect, const Radius.circular(8)));
 
     final combinedPath =
         Path.combine(PathOperation.difference, overlayPath, windowPath);
@@ -700,5 +1039,6 @@ class _PassportOverlayPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _PassportOverlayPainter oldDelegate) =>
+      oldDelegate.boxWidth != boxWidth || oldDelegate.boxHeight != boxHeight;
 }

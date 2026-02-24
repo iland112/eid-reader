@@ -16,7 +16,55 @@ class MrzOcrCorrector {
       }
       buffer.write(c);
     }
-    return buffer.toString();
+    var result = buffer.toString();
+
+    // In name field (positions 5+), clean up filler misrecognition.
+    // OCR commonly reads '<' as 'K', 'X', 'V', 'N', etc.
+    if (result.length > 5) {
+      final prefix = result.substring(0, 5);
+      var nameField = result.substring(5);
+
+      // Phase 0: Convert trailing K-run to fillers.
+      // OCR often reads trailing '<' as 'K'. Convert consecutive Ks
+      // from the end, stopping at any non-K character (including '<').
+      // This handles the all-K case (BAEKKKK → BAE<<<<) while
+      // preserving names when fillers are already correctly read
+      // (BAEK<<<< stays unchanged because < stops the scan).
+      final chars = nameField.split('');
+      for (int i = chars.length - 1; i >= 0; i--) {
+        if (chars[i] == 'K') {
+          chars[i] = '<';
+        } else {
+          break;
+        }
+      }
+      nameField = chars.join();
+
+      // Pass 1: Replace runs of 3+ identical non-< chars with fillers
+      // (e.g. XXXXXX → <<<<<<). Real names don't repeat 3+ times.
+      nameField = nameField.replaceAllMapped(
+        RegExp(r'([^<])\1{2,}'),
+        (m) => '<' * m.group(0)!.length,
+      );
+
+      // Pass 2: Replace isolated single non-< char surrounded by fillers
+      // (e.g. ...<<<K → ...<<<< at end, or <<<K<<< → <<<<<<<)
+      nameField = nameField.replaceAllMapped(
+        RegExp(r'(?<=<{2})[^<](?=<{2}|$)'),
+        (m) => '<',
+      );
+
+      // Pass 3: Replace K (most common '<' misread) between fillers.
+      // Handles patterns like <K<, <KK<, <K<K<K< that Passes 1-2 miss.
+      nameField = nameField.replaceAllMapped(
+        RegExp(r'(?<=<)K+(?=<|$)'),
+        (m) => '<' * m.group(0)!.length,
+      );
+
+      result = prefix + nameField;
+    }
+
+    return result;
   }
 
   /// Corrects Line 2 characters using position-specific context.

@@ -240,6 +240,54 @@ More text below
     });
   });
 
+  group('ParseMrzFromText ICAO 9303 document subtypes', () {
+    const validLine2 = 'L898902C<3UTO6908061F9406236ZE184226B<<<<<14';
+
+    test('parses PM subtype (Korean passport)', () {
+      const line1 = 'PMKORJUNG<<KYUNG<BAE<<<<<<<<<<<<<<<<<<<<<<<<<';
+      final result = parser.parse('$line1\n$validLine2');
+      expect(result, isNotNull);
+      expect(result!.documentType, 'PM');
+      expect(result.issuingState, 'KOR');
+      expect(result.surname, 'JUNG');
+      expect(result.givenNames, 'KYUNG BAE');
+    });
+
+    test('parses PD subtype (diplomatic passport)', () {
+      const line1 = 'PDGBRDOE<<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<';
+      final result = parser.parse('$line1\n$validLine2');
+      expect(result, isNotNull);
+      expect(result!.documentType, 'PD');
+      expect(result.issuingState, 'GBR');
+      expect(result.surname, 'DOE');
+      expect(result.givenNames, 'JOHN');
+    });
+
+    test('parses PO subtype (official passport)', () {
+      const line1 = 'PODEUSCHMIDT<<ANNA<<<<<<<<<<<<<<<<<<<<<<<<<<';
+      final result = parser.parse('$line1\n$validLine2');
+      expect(result, isNotNull);
+      expect(result!.documentType, 'PO');
+      expect(result.issuingState, 'DEU');
+    });
+
+    test('parses PS subtype (service passport)', () {
+      const line1 = 'PSFRADUPONT<<MARIE<<<<<<<<<<<<<<<<<<<<<<<<<';
+      final result = parser.parse('$line1\n$validLine2');
+      expect(result, isNotNull);
+      expect(result!.documentType, 'PS');
+      expect(result.issuingState, 'FRA');
+    });
+
+    test('parses P< subtype (regular passport) with type P', () {
+      const line1 = 'P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<';
+      final result = parser.parse('$line1\n$validLine2');
+      expect(result, isNotNull);
+      expect(result!.documentType, 'P');
+      expect(result.issuingState, 'UTO');
+    });
+  });
+
   group('ParseMrzFromText Line 1 OCR correction', () {
     const validLine2 = 'L898902C<3UTO6908061F9406236ZE184226B<<<<<14';
 

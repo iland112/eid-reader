@@ -81,6 +81,12 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
   Future<void> readPassport(MrzData mrzData) async {
     state = const PassportReaderState(step: ReadingStep.connecting);
 
+    // Preload face embedding model in parallel with NFC operations.
+    // This eliminates the lazy-load delay (~67ms) when VIZ verification runs.
+    if (_verifyViz != null && mrzData.vizCaptureResult != null) {
+      _verifyViz.preloadModel();
+    }
+
     try {
       // Check NFC availability before attempting to read
       if (_checkNfc) {
@@ -204,7 +210,7 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
 
 /// PA Service base URL provider. Override for custom server address.
 final paServiceBaseUrlProvider = Provider<String>((ref) {
-  return 'http://192.168.1.43:18080';
+  return 'http://192.168.1.70:8080';
 });
 
 /// PA Service provider. Returns null if base URL is empty.

@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-02-22
+Last updated: 2026-02-24
 
 ## Overview
 
@@ -176,9 +176,28 @@ This document tracks what has been implemented and what remains.
 - **`cameraMrzData` preservation**: `MrzInputProvider` stores full `MrzData` from camera scan through the pipeline
 - 90 new tests (7 new test files + updates to 8 existing test files)
 
-### Test Suite (v0.2 + v0.3 + v0.4 + v0.5 + v0.7 + v0.8 + v0.9 + v0.10 + v0.11)
+### Performance Optimization Phase 2 (v0.12)
 
-- 351 tests across 33 test files (~270 unit + ~81 widget)
+- **OCR ROI cropping**: `cropNv21ForMrz()` utility crops NV21 buffer to MRZ region (~40% of user-visible bottom) before ML Kit, reducing OCR pixel count by 60%
+  - Rotation-aware cropping (0°/90°/180°/270°): row crop for 0°/180°, column crop for 90°/270°
+  - `srcStride` support for camera buffers with row padding
+  - Buffer size validation (skip crop if buffer too small)
+  - Even-alignment enforcement for NV21 chroma subsampling
+- **Preview face reuse**: caches last preview NV21 frame, runs ML Kit face detection during 300ms stabilization delay via `Future.wait()`, scales coordinates to high-res still image → skips ~500ms high-res ML Kit detection
+  - `rawSize` vs `previewSize` separation: raw buffer dims for ML Kit metadata, rotated dims for coordinate scaling
+- **Ghost image defense**: position-aware face selection (`_selectMainFace`) prefers faces in the left 40% of image (ICAO 9303 main photo position) with 1.5x area scoring bonus
+- **NFC maxRead increase**: dmrtd fork `_defaultReadLength` 112 → 224 bytes per APDU, halving DG2 read round-trips
+- **Debug log service**: `DebugLogService` singleton with file output + in-memory ring buffer for on-device log overlay
+- **Measured results** (Galaxy A36 5G):
+  - MRZ consensus: ~28 frames / ~19s → ~9 frames / ~6s (**-68%**)
+  - VIZ face capture: ~867ms → ~250ms (**-71%**)
+  - NFC DG2 read: 4.3s → 3.0s (**-30%**)
+- New files: `lib/core/utils/nv21_utils.dart`, `lib/core/services/debug_log_service.dart`
+- 48 new tests (17 nv21_utils + 2 ghost image + 5 preview face + 24 others)
+
+### Test Suite (v0.2 – v0.12)
+
+- 399 tests across 35 test files (~310 unit + ~89 widget)
 - Manual mock pattern (no mockito codegen due to analyzer incompatibility)
 - Widget tests for all 4 screens (MrzInput, MrzCamera, NfcScan, PassportDetail)
 - See [testing.md](testing.md) for details
@@ -217,6 +236,7 @@ This document tracks what has been implemented and what remains.
 | ~~MRZ Full Field Parsing + Comparison~~ | ~~Medium~~ | DONE (v0.11) — All MRZ fields parsed, field-by-field OCR↔DG1 comparison |
 | ~~Enhanced OCR Correction~~ | ~~Medium~~ | DONE (v0.11) — MrzOcrCorrector, ICAO codes, multi-frame consensus |
 | ~~Face Detection Improvement~~ | ~~Low~~ | DONE (v0.11) — minFaceSize 0.08, contrast enhancement retry |
+| ~~Performance Optimization~~ | ~~Medium~~ | DONE (v0.12) — OCR ROI crop, preview face reuse, ghost image defense, NFC maxRead 224 |
 | VIZ threshold tuning | Low | Tune similarity/quality thresholds with real passport data |
 
 ## Commit History

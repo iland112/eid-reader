@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:eid_reader/features/mrz_input/domain/entities/mrz_data.dart';
+import 'package:eid_reader/features/mrz_input/presentation/providers/mrz_input_provider.dart';
 import 'package:eid_reader/features/mrz_input/presentation/screens/mrz_input_screen.dart';
 
 final bool _isDesktop =
@@ -56,11 +58,24 @@ void main() {
       expect(find.text('eID Reader'), findsOneWidget);
     });
 
-    testWidgets('renders headline text', (tester) async {
+    testWidgets('renders instruction text when no camera data',
+        (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      expect(find.text('Enter Passport MRZ Data'), findsOneWidget);
+      if (_isDesktop) {
+        expect(
+          find.text(
+              'Enter passport MRZ data to read the e-Passport chip.'),
+          findsOneWidget,
+        );
+      } else {
+        expect(
+          find.text(
+              'Scan the passport VIZ, or enter MRZ data manually.'),
+          findsOneWidget,
+        );
+      }
     });
 
     testWidgets('renders three text fields', (tester) async {
@@ -171,20 +186,13 @@ void main() {
         // Desktop: 'Read with Card Reader' with USB icon, no camera scan
         expect(find.text('Read with Card Reader'), findsOneWidget);
         expect(find.byIcon(Icons.usb), findsOneWidget);
-        expect(find.text('Scan MRZ'), findsNothing);
+        expect(find.text('Scan VIZ'), findsNothing);
       } else {
-        // Mobile: 'Scan Passport' with NFC icon + 'Scan MRZ' camera button
+        // Mobile: 'Scan Passport' with NFC icon + 'Scan VIZ' camera button
         expect(find.text('Scan Passport'), findsOneWidget);
         expect(find.byIcon(Icons.contactless), findsOneWidget);
-        expect(find.text('Scan MRZ'), findsOneWidget);
+        expect(find.text('Scan VIZ'), findsOneWidget);
       }
-    });
-
-    testWidgets('renders credit card icon', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.byIcon(Icons.credit_card), findsOneWidget);
     });
 
     testWidgets('renders field hint texts', (tester) async {
@@ -194,6 +202,47 @@ void main() {
       expect(find.text('e.g. M12345678'), findsOneWidget);
       expect(find.text('YYMMDD (e.g. 900115)'), findsOneWidget);
       expect(find.text('YYMMDD (e.g. 300115)'), findsOneWidget);
+    });
+
+    testWidgets('renders log share button in debug mode', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.share), findsOneWidget);
+      expect(find.byTooltip('Share debug log'), findsOneWidget);
+    });
+
+    testWidgets('shows VIZ scan result card when camera data available',
+        (tester) async {
+      final notifier = MrzInputNotifier();
+      notifier.setFromMrz(const MrzData(
+        documentNumber: 'L898902C',
+        dateOfBirth: '690806',
+        dateOfExpiry: '940623',
+        surname: 'ERIKSSON',
+        givenNames: 'ANNA MARIA',
+        nationality: 'UTO',
+        sex: 'F',
+        mrzLine1: 'P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<',
+        mrzLine2: 'L898902C<3UTO6908061F9406236ZE184226B<<<<<14',
+      ));
+
+      await tester.pumpWidget(_buildTestApp(
+        overrides: [
+          mrzInputProvider.overrideWith((ref) => notifier),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Should show scan result card
+      expect(find.text('Scan Result'), findsOneWidget);
+      expect(find.byIcon(Icons.document_scanner), findsOneWidget);
+      expect(find.textContaining('ANNA MARIA ERIKSSON'), findsOneWidget);
+      expect(find.textContaining('UTO'), findsWidgets);
+
+      // Hero card should NOT be present
+      expect(find.text('Enter Passport MRZ Data'), findsNothing);
+      expect(find.byIcon(Icons.credit_card), findsNothing);
     });
   });
 }

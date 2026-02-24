@@ -1,7 +1,9 @@
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:logging/logging.dart';
 
 import '../../../../core/services/face_detection_service.dart';
 import '../../../../core/services/image_quality_analyzer.dart';
@@ -9,6 +11,8 @@ import '../../../passport_reader/domain/usecases/capture_viz_face.dart';
 import '../../domain/entities/mrz_data.dart';
 import '../../domain/entities/viz_capture_result.dart';
 import '../../domain/usecases/parse_mrz_from_text.dart';
+
+final _log = Logger('MrzCameraProvider');
 
 /// VIZ capture status during MRZ + VIZ camera session.
 enum VizCaptureStatus {
@@ -24,7 +28,6 @@ class MrzCameraState {
   final bool isProcessing;
   final MrzData? detectedMrz;
   final String? errorMessage;
-  final String? debugOcrText;
   final int debugFrameCount;
   final VizCaptureResult? vizCapture;
   final VizCaptureStatus vizCaptureStatus;
@@ -33,7 +36,6 @@ class MrzCameraState {
     this.isProcessing = false,
     this.detectedMrz,
     this.errorMessage,
-    this.debugOcrText,
     this.debugFrameCount = 0,
     this.vizCapture,
     this.vizCaptureStatus = VizCaptureStatus.idle,
@@ -43,7 +45,6 @@ class MrzCameraState {
     bool? isProcessing,
     MrzData? detectedMrz,
     String? errorMessage,
-    String? debugOcrText,
     int? debugFrameCount,
     VizCaptureResult? vizCapture,
     VizCaptureStatus? vizCaptureStatus,
@@ -52,7 +53,6 @@ class MrzCameraState {
       isProcessing: isProcessing ?? this.isProcessing,
       detectedMrz: detectedMrz ?? this.detectedMrz,
       errorMessage: errorMessage,
-      debugOcrText: debugOcrText ?? this.debugOcrText,
       debugFrameCount: debugFrameCount ?? this.debugFrameCount,
       vizCapture: vizCapture ?? this.vizCapture,
       vizCaptureStatus: vizCaptureStatus ?? this.vizCaptureStatus,
@@ -111,23 +111,20 @@ class MrzCameraNotifier extends StateNotifier<MrzCameraState> {
 
     final frameCount = state.debugFrameCount + 1;
     state = state.copyWith(isProcessing: true, errorMessage: null);
+    final sw = Stopwatch()..start();
 
     try {
       final text = await _recognitionService.recognizeText(image);
-      final mrzData = _parser.parse(text);
+      final ocrMs = sw.elapsedMilliseconds;
 
-      // Build debug info: show OCR text and candidate line info
-      final debugInfo = StringBuffer();
-      debugInfo.writeln('[Frame #$frameCount] OCR chars: ${text.length}');
-      final lines = text.split(RegExp(r'[\n\r]+'));
-      final longLines = lines
-          .where((l) => l.replaceAll(' ', '').length >= 30)
-          .toList();
-      debugInfo.writeln('Lines: ${lines.length}, long(>=30): ${longLines.length}');
-      for (final l in longLines.take(4)) {
-        final cleaned = l.replaceAll(' ', '');
-        debugInfo.writeln('[${cleaned.length}] ${cleaned.length > 50 ? '${cleaned.substring(0, 50)}...' : cleaned}');
-      }
+      final mrzData = _parser.parse(text);
+      final parseMs = sw.elapsedMilliseconds;
+
+      _log.fine(
+        'Frame #$frameCount: OCR=${ocrMs}ms, '
+        'parse=${parseMs - ocrMs}ms, '
+        'result=${mrzData != null ? "MRZ found" : "no MRZ"}',
+      );
 
       if (mrzData != null) {
         _candidates.add(mrzData);
@@ -135,29 +132,28 @@ class MrzCameraNotifier extends StateNotifier<MrzCameraState> {
         // Check consensus: same core fields (docNum, DOB, DOE) N times
         final consensusMrz = _checkConsensus();
         if (consensusMrz != null) {
+          _log.info(
+            'Consensus reached at frame #$frameCount '
+            '(${_candidates.length} candidates, ${parseMs}ms)',
+          );
           state = MrzCameraState(
             detectedMrz: consensusMrz,
-            debugOcrText: debugInfo.toString(),
             debugFrameCount: frameCount,
             vizCaptureStatus: VizCaptureStatus.idle,
           );
         } else {
-          debugInfo.writeln(
-              'Consensus: ${_candidates.length}/$consensusCount');
           state = MrzCameraState(
-            debugOcrText: debugInfo.toString(),
             debugFrameCount: frameCount,
           );
         }
       } else {
         state = MrzCameraState(
-          debugOcrText: debugInfo.toString(),
           debugFrameCount: frameCount,
         );
       }
     } catch (e) {
+      _log.fine('Frame #$frameCount: error (${sw.elapsedMilliseconds}ms)');
       state = MrzCameraState(
-        debugOcrText: '[Frame #$frameCount] Error: $e',
         debugFrameCount: frameCount,
       );
     }
@@ -168,11 +164,24 @@ class MrzCameraNotifier extends StateNotifier<MrzCameraState> {
   /// Called after MRZ detection when takePicture() captures a still frame.
   /// [imageBytes] - JPEG bytes from camera takePicture().
   /// [inputImage] - InputImage for ML Kit face detection.
+  /// [rotationCompensation] - Degrees to rotate raw sensor image to match
+  ///   display orientation (computed from sensor + device orientation).
   Future<void> captureViz({
     required Uint8List imageBytes,
     required InputImage inputImage,
+    int rotationCompensation = 90,
+    Rect? previewFaceRect,
+    Size? previewSize,
   }) async {
-    if (_captureVizFace == null) return;
+    if (_captureVizFace == null) {
+      _log.warning('captureViz: _captureVizFace is null, skipping');
+      return;
+    }
+
+    _log.info(
+      'captureViz: starting, imageSize=${imageBytes.length} bytes, '
+      'rotation=$rotationCompensation',
+    );
 
     state = state.copyWith(
       vizCaptureStatus: VizCaptureStatus.detectingFace,
@@ -182,24 +191,32 @@ class MrzCameraNotifier extends StateNotifier<MrzCameraState> {
       final vizResult = await _captureVizFace.execute(
         imageBytes: imageBytes,
         inputImage: inputImage,
+        rotationCompensation: rotationCompensation,
+        previewFaceRect: previewFaceRect,
+        previewSize: previewSize,
       );
 
       if (vizResult != null) {
+        _log.info(
+          'captureViz: face captured, '
+          'faceSize=${vizResult.vizFaceImageBytes.length} bytes',
+        );
         // Attach VIZ capture to the detected MRZ data
         final mrzWithViz = state.detectedMrz?.withVizCapture(vizResult);
         state = MrzCameraState(
           detectedMrz: mrzWithViz ?? state.detectedMrz,
-          debugOcrText: state.debugOcrText,
           debugFrameCount: state.debugFrameCount,
           vizCapture: vizResult,
           vizCaptureStatus: VizCaptureStatus.ready,
         );
       } else {
+        _log.info('captureViz: no face found');
         state = state.copyWith(
           vizCaptureStatus: VizCaptureStatus.noFace,
         );
       }
-    } catch (e) {
+    } catch (e, st) {
+      _log.warning('captureViz: error', e, st);
       state = state.copyWith(
         vizCaptureStatus: VizCaptureStatus.error,
       );
@@ -230,6 +247,16 @@ class MrzCameraNotifier extends StateNotifier<MrzCameraState> {
       counts[key] = (counts[key] ?? 0) + 1;
     }
 
+    // Find the best count for logging
+    int maxCount = 0;
+    for (final v in counts.values) {
+      if (v > maxCount) maxCount = v;
+    }
+    _log.fine(
+      'Consensus check: ${_candidates.length} candidates, '
+      'best=$maxCount/$consensusCount',
+    );
+
     // Find the first key that reaches consensus
     for (final entry in counts.entries) {
       if (entry.value >= consensusCount) {
@@ -243,6 +270,11 @@ class MrzCameraNotifier extends StateNotifier<MrzCameraState> {
       }
     }
     return null;
+  }
+
+  /// Marks VIZ capture as failed so the UI can proceed.
+  void markVizError() {
+    state = state.copyWith(vizCaptureStatus: VizCaptureStatus.error);
   }
 
   /// Reset state for re-scanning.

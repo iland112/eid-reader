@@ -13,6 +13,10 @@ abstract class FaceEmbeddingService {
   /// Returns a normalized embedding vector.
   Future<List<double>> generateEmbedding(Uint8List faceImageBytes);
 
+  /// Preloads the model so that the first generateEmbedding() call is fast.
+  /// No-op if already loaded. Safe to call multiple times.
+  Future<void> preload();
+
   /// Releases resources.
   void close();
 }
@@ -57,6 +61,13 @@ class TfLiteFaceEmbeddingService implements FaceEmbeddingService {
     } catch (e) {
       _log.warning('Failed to load MobileFaceNet model: $e');
       rethrow;
+    }
+  }
+
+  @override
+  Future<void> preload() async {
+    if (_interpreter == null) {
+      await initialize();
     }
   }
 
