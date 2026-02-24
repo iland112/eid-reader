@@ -56,3 +56,8 @@ coverage/
 
 # Local dmrtd fork
 dmrtd-fork/
+
+# Debug artifacts
+docs/eid_debug_*.log
+docs/Screenshot_*.jpg
+test_result.txt
