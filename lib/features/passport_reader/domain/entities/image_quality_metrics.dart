@@ -8,6 +8,20 @@ enum ImageQualityLevel {
   unusable,
 }
 
+/// Classified image quality issues.
+///
+/// Used instead of raw strings so that the presentation layer can
+/// resolve localized messages via [AppLocalizations].
+enum ImageQualityIssue {
+  blurry,
+  severeGlare,
+  moderateGlare,
+  rainbowPattern,
+  lowContrast,
+  decodeFailed,
+  emptyImage,
+}
+
 /// Image quality metrics for hologram/glare detection on VIZ face photos.
 ///
 /// Uses purely computational metrics (no ML model) to assess whether
@@ -33,7 +47,7 @@ class ImageQualityMetrics extends Equatable {
   final double overallScore;
 
   /// Detected quality issues.
-  final List<String> issues;
+  final List<ImageQualityIssue> issues;
 
   const ImageQualityMetrics({
     required this.blurScore,

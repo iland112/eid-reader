@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../../../core/utils/l10n_extension.dart';
 import '../../../mrz_input/domain/entities/mrz_data.dart';
 import '../../domain/entities/passport_data.dart';
+import '../../domain/entities/passport_read_error.dart';
 import '../providers/passport_reader_provider.dart';
 import '../widgets/nfc_pulse_animation.dart';
 import '../widgets/reading_step_indicator.dart';
@@ -75,7 +78,7 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scanning Passport'),
+        title: Text(context.l10n.nfcScanTitle),
       ),
       body: SafeArea(
         child: Padding(
@@ -132,12 +135,13 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
                     child: ElevatedButton.icon(
                       onPressed: _retry,
                       icon: const Icon(Icons.refresh),
-                      label: Text('Retry (${_retryCount + 1}/$_maxRetries)'),
+                      label: Text(context.l10n.nfcScanRetryButton(
+                          '${_retryCount + 1}', '$_maxRetries')),
                     ),
                   )
                 else ...[
                   Text(
-                    'Multiple attempts failed. Please re-check your passport details.',
+                    context.l10n.nfcScanMultipleFailures,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -149,7 +153,7 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
                     child: OutlinedButton.icon(
                       onPressed: () => context.pop(),
                       icon: const Icon(Icons.arrow_back),
-                      label: const Text('Return to MRZ Input'),
+                      label: Text(context.l10n.nfcScanReturnToMrz),
                     ),
                   ),
                 ],
@@ -173,20 +177,23 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.phone_android, size: 32, color: colorScheme.primary),
-                const SizedBox(width: 8),
-                Icon(Icons.arrow_forward,
-                    size: 20, color: colorScheme.onSurfaceVariant),
-                const SizedBox(width: 8),
-                Icon(Icons.menu_book, size: 32, color: colorScheme.primary),
-              ],
+            ExcludeSemantics(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.phone_android,
+                      size: 32, color: colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Icon(Icons.arrow_forward,
+                      size: 20, color: colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Icon(Icons.menu_book, size: 32, color: colorScheme.primary),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
             Text(
-              'Place phone flat on the passport data page',
+              context.l10n.nfcScanPositionTitle,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -194,7 +201,7 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Keep still until reading completes',
+              context.l10n.nfcScanPositionSubtitle,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -207,34 +214,52 @@ class _NfcScanScreenState extends ConsumerState<NfcScanScreen> {
   }
 
   Widget _buildStatusText(PassportReaderState state) {
+    final l10n = context.l10n;
     final String message;
     switch (state.step) {
       case ReadingStep.idle:
-        message = 'Preparing...';
+        message = l10n.stepPreparing;
       case ReadingStep.connecting:
-        message = 'Waiting for passport...';
+        message = l10n.stepWaitingNfc;
       case ReadingStep.authenticating:
-        message = 'Authenticating...';
+        message = l10n.stepAuthenticating;
       case ReadingStep.readingDg1:
-        message = 'Reading personal data...';
+        message = l10n.stepReadingPersonalData;
       case ReadingStep.readingDg2:
-        message = 'Reading face image...';
+        message = l10n.stepReadingFaceImage;
       case ReadingStep.readingSod:
-        message = 'Reading security data...';
+        message = l10n.stepReadingSecurityData;
       case ReadingStep.verifyingPa:
-        message = 'Verifying document authenticity...';
+        message = l10n.stepVerifyingAuthenticity;
       case ReadingStep.verifyingViz:
-        message = 'Comparing face with chip data...';
+        message = l10n.stepComparingFace;
       case ReadingStep.done:
-        message = 'Scan complete!';
+        message = l10n.stepScanComplete;
       case ReadingStep.error:
-        message = state.errorMessage ?? 'An error occurred';
+        message = _passportReadErrorMessage(state.error, l10n);
     }
 
-    return Text(
-      message,
-      style: Theme.of(context).textTheme.titleMedium,
-      textAlign: TextAlign.center,
+    return Semantics(
+      liveRegion: true,
+      child: Text(
+        message,
+        style: Theme.of(context).textTheme.titleMedium,
+        textAlign: TextAlign.center,
+      ),
     );
+  }
+
+  static String _passportReadErrorMessage(
+      PassportReadError? error, AppLocalizations l10n) {
+    return switch (error) {
+      PassportReadError.tagLost => l10n.errorTagLost,
+      PassportReadError.authFailed => l10n.errorAuthFailed,
+      PassportReadError.passportNotDetected => l10n.errorPassportNotDetected,
+      PassportReadError.timeout => l10n.errorTimeout,
+      PassportReadError.nfcError => l10n.errorNfc,
+      PassportReadError.nfcNotSupported => l10n.errorNfcNotSupported,
+      PassportReadError.nfcDisabled => l10n.errorNfcDisabled,
+      PassportReadError.generic || null => l10n.errorGenericRead,
+    };
   }
 }

@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../passport_reader/domain/entities/passport_data.dart';
 import 'viz_capture_result.dart';
 
 /// MRZ data parsed from ICAO 9303 TD3 passport machine-readable zone.
@@ -75,6 +76,24 @@ class MrzData extends Equatable {
       givenNames: givenNames,
       nationality: nationality,
       sex: sex,
+    );
+  }
+
+  /// Converts MRZ data to PassportData for OCR-only mode (no chip reading).
+  PassportData toPassportData() {
+    return PassportData(
+      surname: surname ?? '',
+      givenNames: givenNames ?? '',
+      documentNumber: documentNumber,
+      nationality: nationality ?? '',
+      dateOfBirth: dateOfBirth,
+      sex: sex ?? '',
+      dateOfExpiry: dateOfExpiry,
+      issuingState: issuingState ?? '',
+      documentType: documentType ?? 'P',
+      authProtocol: 'OCR',
+      vizFaceBytes: vizCaptureResult?.vizFaceImageBytes,
+      vizImageQuality: vizCaptureResult?.qualityMetrics,
     );
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:eid_reader/features/mrz_input/domain/entities/mrz_data.dart';
+import 'package:eid_reader/features/mrz_input/domain/entities/validation_error.dart';
 import 'package:eid_reader/features/mrz_input/domain/usecases/validate_mrz.dart';
 
 void main() {
@@ -81,14 +82,14 @@ void main() {
       expect(validateMrz.validateDate('691231'), isNull);
     });
 
-    test('uses custom field name in error messages', () {
-      final error = validateMrz.validateDate('', fieldName: 'Date of birth');
-      expect(error, contains('Date of birth'));
+    test('returns dateRequired error for empty string with no fieldName', () {
+      final error = validateMrz.validateDate('');
+      expect(error, MrzValidationError.dateRequired);
     });
 
-    test('uses default field name when not specified', () {
+    test('returns dateRequired error for empty string', () {
       final error = validateMrz.validateDate('');
-      expect(error, contains('Date'));
+      expect(error, MrzValidationError.dateRequired);
     });
   });
 
@@ -109,7 +110,7 @@ void main() {
         dateOfExpiry: '940623',
       );
       final error = validateMrz.validate(data);
-      expect(error, contains('Document number'));
+      expect(error, MrzValidationError.docNumberRequired);
     });
 
     test('returns error when date of birth is invalid', () {

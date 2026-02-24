@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/l10n_extension.dart';
 import '../../../../core/utils/mrz_utils.dart';
 import '../../domain/entities/mrz_data.dart';
 
@@ -32,7 +33,7 @@ class VizScanResultCard extends StatelessWidget {
                     size: 20, color: colorScheme.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'Scan Result',
+                  context.l10n.vizScanResultTitle,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         color: colorScheme.primary,
                         fontWeight: FontWeight.bold,
@@ -55,7 +56,7 @@ class VizScanResultCard extends StatelessWidget {
                       if (mrzData.surname != null)
                         _buildField(
                           context,
-                          'Name',
+                          context.l10n.vizLabelName,
                           mrzData.givenNames != null &&
                                   mrzData.givenNames!.isNotEmpty
                               ? '${mrzData.givenNames} ${mrzData.surname}'
@@ -63,26 +64,26 @@ class VizScanResultCard extends StatelessWidget {
                         ),
                       if (mrzData.documentType != null)
                         _buildField(
-                            context, 'Doc Type', mrzData.documentType!),
+                            context, context.l10n.vizLabelDocType, mrzData.documentType!),
                       if (mrzData.issuingState != null)
                         _buildField(
-                            context, 'Issuing State', mrzData.issuingState!),
+                            context, context.l10n.vizLabelIssuingState, mrzData.issuingState!),
                       if (mrzData.nationality != null)
                         _buildField(
-                            context, 'Nationality', mrzData.nationality!),
+                            context, context.l10n.vizLabelNationality, mrzData.nationality!),
                       _buildField(
-                          context, 'Doc No.', mrzData.documentNumber),
+                          context, context.l10n.vizLabelDocNo, mrzData.documentNumber),
                       _buildField(
                         context,
-                        'DOB',
+                        context.l10n.vizLabelDob,
                         MrzUtils.formatDisplayDate(mrzData.dateOfBirth,
                             isDob: true),
                       ),
                       if (mrzData.sex != null && mrzData.sex!.isNotEmpty)
-                        _buildField(context, 'Sex', mrzData.sex!),
+                        _buildField(context, context.l10n.vizLabelSex, mrzData.sex!),
                       _buildField(
                         context,
-                        'Expiry',
+                        context.l10n.vizLabelExpiry,
                         MrzUtils.formatDisplayDate(mrzData.dateOfExpiry),
                       ),
                     ],
@@ -139,6 +140,7 @@ class VizScanResultCard extends StatelessWidget {
           ? Image.memory(
               faceBytes,
               fit: BoxFit.cover,
+              semanticLabel: context.l10n.semanticScannedFace,
               errorBuilder: (_, __, ___) => Icon(
                 Icons.person,
                 size: 40,

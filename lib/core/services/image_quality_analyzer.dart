@@ -37,7 +37,7 @@ class DefaultImageQualityAnalyzer implements ImageQualityAnalyzer {
         saturationStdDev: 0,
         contrastRatio: 0,
         overallScore: 0,
-        issues: ['Failed to decode image'],
+        issues: [ImageQualityIssue.decodeFailed],
       );
     }
 
@@ -69,7 +69,7 @@ class DefaultImageQualityAnalyzer implements ImageQualityAnalyzer {
         saturationStdDev: 0,
         contrastRatio: 0,
         overallScore: 0,
-        issues: ['Empty image'],
+        issues: [ImageQualityIssue.emptyImage],
       );
     }
 
@@ -110,18 +110,18 @@ class DefaultImageQualityAnalyzer implements ImageQualityAnalyzer {
     required double saturationStdDev,
     required double contrastRatio,
   }) {
-    final issues = <String>[];
-    if (blurScore < 50) issues.add('Image is blurry');
+    final issues = <ImageQualityIssue>[];
+    if (blurScore < 50) issues.add(ImageQualityIssue.blurry);
     if (glareRatio > 0.15) {
-      issues.add('Severe glare detected (possible hologram)');
+      issues.add(ImageQualityIssue.severeGlare);
     }
     if (glareRatio > 0.05 && glareRatio <= 0.15) {
-      issues.add('Moderate glare detected');
+      issues.add(ImageQualityIssue.moderateGlare);
     }
     if (saturationStdDev > 0.25) {
-      issues.add('Rainbow pattern detected (possible hologram)');
+      issues.add(ImageQualityIssue.rainbowPattern);
     }
-    if (contrastRatio < 0.15) issues.add('Low contrast');
+    if (contrastRatio < 0.15) issues.add(ImageQualityIssue.lowContrast);
 
     final overallScore = _calculateOverallScore(
       blurScore: blurScore,

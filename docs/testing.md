@@ -2,8 +2,8 @@
 
 ## Overview
 
-- **Total tests**: 351
-- **Test files**: 30 (25 unit + 5 widget)
+- **Total tests**: 476
+- **Test files**: 37 (28 unit + 9 widget)
 - **Framework**: `flutter_test`
 - **Mock strategy**: Manual mocks (no mockito codegen)
 - **CI command**: `flutter test`
@@ -111,6 +111,21 @@ Tests ISO 3166-1 alpha-3 to alpha-2 conversion and flag asset path generation.
 | alpha3ToAlpha2 | KOR→kr, USA→us, GBR→gb, DEU→de, JPN→jp, case-insensitive, unknown→null, empty→null, D<<→de |
 | flagAssetPath | KOR→assets/svg/kr.svg, USA→assets/svg/us.svg, unknown→null |
 
+### App
+
+#### `test/app/device_capability_provider_test.dart` (6 tests)
+
+Tests `ChipReaderCapability` enum and `hasChipReader()` utility function.
+
+| Test | Description |
+|---|---|
+| hasChipReader nfcEnabled | Returns true |
+| hasChipReader pcscAvailable | Returns true |
+| hasChipReader nfcDisabled | Returns false |
+| hasChipReader none | Returns false |
+| Enum count | 4 values |
+| Enum values | nfcEnabled, nfcDisabled, pcscAvailable, none |
+
 ### Feature: MRZ Input
 
 #### `test/features/mrz_input/domain/entities/mrz_data_test.dart` (7 tests)
@@ -124,6 +139,18 @@ Tests ISO 3166-1 alpha-3 to alpha-2 conversion and flag asset path generation.
 | withVizCapture | Preserves all fields including optional ones |
 | Raw MRZ lines | mrzLine1/mrzLine2 stored and compared |
 | Equality with all fields | Full MrzData equality including optional fields |
+
+#### `test/features/mrz_input/domain/entities/mrz_data_conversion_test.dart` (5 tests)
+
+Tests `MrzData.toPassportData()` conversion for OCR-only mode.
+
+| Test | Description |
+|---|---|
+| Required fields | Maps documentNumber, dateOfBirth, dateOfExpiry correctly |
+| authProtocol OCR | Sets authProtocol to 'OCR', isOcrOnly true |
+| Null optional fields | Maps null surname/givenNames/nationality/sex to empty strings |
+| vizCaptureResult mapping | Maps vizFaceBytes and vizImageQuality from VizCaptureResult |
+| Chip-only defaults | passiveAuthValid false, faceImageBytes null, debugTimings empty |
 
 #### `test/features/mrz_input/domain/entities/viz_capture_result_test.dart` (4 tests)
 
@@ -372,7 +399,7 @@ Tests `VerifyViz` use case for VIZ-chip cross-verification and field-by-field co
 
 ### Widget: MRZ Input Screen
 
-#### `test/features/mrz_input/presentation/screens/mrz_input_screen_test.dart` (10 tests)
+#### `test/features/mrz_input/presentation/screens/mrz_input_screen_test.dart` (14 tests)
 
 | Test | Description |
 |---|---|
@@ -386,6 +413,10 @@ Tests `VerifyViz` use case for VIZ-chip cross-verification and field-by-field co
 | Platform-appropriate button | Desktop: no camera scan; Mobile: NFC + camera scan buttons |
 | Credit card icon | Renders instruction card icon |
 | Field hints | Renders hint texts (e.g. 'e.g. M12345678') |
+| OCR-only banner | Shows OCR-only info banner when no chip reader |
+| NFC disabled banner | Shows NFC disabled warning when NFC hardware present but off |
+| View Passport Info button | Shows OCR-only button when no chip reader |
+| Hides Scan Passport | Hides chip reader button when no reader available |
 
 ### Widget: MRZ Camera Screen
 
@@ -430,7 +461,7 @@ animation, step indicator, and positioning guide.
 
 ### Widget: Passport Detail Screen
 
-#### `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` (16 tests)
+#### `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` (22 tests)
 
 Uses `Navigator.pushReplacement` to test dispose behavior. Updated for v0.7
 card-based layout with `PassportHeaderCard` + `InfoSectionCard` widgets.
@@ -453,6 +484,12 @@ card-based layout with `PassportHeaderCard` + `InfoSectionCard` widgets.
 | PA details section | Shows 'PA Verification Details' header with PA result |
 | PA cert chain details | Shows cert chain, SOD sig, DG hash, timing |
 | PA error message | Shows error message for failed PA verification |
+| OCR title | Renders 'Passport Info (OCR)' for OCR-only data |
+| OCR badge | Shows OCR badge with document_scanner icon |
+| OCR personal/document | Renders Personal Information and Document Details sections |
+| OCR hides security | Hides Security Status section in OCR mode |
+| OCR hides PA | Hides PA Verification Details in OCR mode |
+| OCR badge description | Shows 'MRZ only' description text |
 
 ### Widget: VIZ Verification Card
 

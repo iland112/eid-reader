@@ -195,9 +195,36 @@ This document tracks what has been implemented and what remains.
 - New files: `lib/core/utils/nv21_utils.dart`, `lib/core/services/debug_log_service.dart`
 - 48 new tests (17 nv21_utils + 2 ghost image + 5 preview face + 24 others)
 
-### Test Suite (v0.2 – v0.12)
+### Capability-Aware Adaptive UI (v0.13)
 
-- 399 tests across 35 test files (~310 unit + ~89 widget)
+- **Runtime device capability detection**: `ChipReaderCapability` enum + `chipReaderCapabilityProvider` (Riverpod `FutureProvider`)
+  - Reuses existing `NfcServiceAndroid`, `PcscServiceImpl` (no new service classes)
+  - `hasChipReader()` utility function for simple boolean checks
+- **OCR-only mode**: `MrzData.toPassportData()` converts MRZ OCR data to `PassportData` with `authProtocol: 'OCR'`
+  - `PassportData.isOcrOnly` getter for conditional UI rendering
+  - Bypasses NFC/PC·SC scan, navigates directly from MRZ input to passport detail
+- **Landing screen adaptation**: feature chips dynamic based on capability
+  - Chip reader available: NFC Read + PA Verify + OCR Scan chips
+  - No chip reader: OCR Scan chip only
+- **MRZ Input screen adaptation**:
+  - NFC disabled banner: warns user to enable NFC (with NFC icon)
+  - OCR-only banner: informs camera scan shows MRZ data only (with info icon)
+  - Camera scan button promoted to `ElevatedButton` when no chip reader
+  - "View Passport Info" button for OCR-only direct navigation
+  - Chip reader scan button hidden when no reader available
+- **PassportDetail screen OCR mode**:
+  - Title: "Passport Info (OCR)" instead of "e-Passport Details"
+  - OCR badge (blue info) instead of security verification badge
+  - Security Status, PA Verification Details, Scan Timing, VIZ Verification sections hidden
+  - Personal Information and Document Details sections shown
+- **Accessible info color**: `AccessibleColors.info()` blue pair (WCAG AA compliant)
+- **Localization**: 8 new keys × 2 languages (en/ko) for OCR-related UI strings
+- New files: `lib/app/device_capability_provider.dart`
+- 22 new tests (2 new test files + updates to 4 existing test files)
+
+### Test Suite (v0.2 – v0.13)
+
+- 476 tests across 37 test files (~370 unit + ~106 widget)
 - Manual mock pattern (no mockito codegen due to analyzer incompatibility)
 - Widget tests for all 4 screens (MrzInput, MrzCamera, NfcScan, PassportDetail)
 - See [testing.md](testing.md) for details
@@ -237,6 +264,7 @@ This document tracks what has been implemented and what remains.
 | ~~Enhanced OCR Correction~~ | ~~Medium~~ | DONE (v0.11) — MrzOcrCorrector, ICAO codes, multi-frame consensus |
 | ~~Face Detection Improvement~~ | ~~Low~~ | DONE (v0.11) — minFaceSize 0.08, contrast enhancement retry |
 | ~~Performance Optimization~~ | ~~Medium~~ | DONE (v0.12) — OCR ROI crop, preview face reuse, ghost image defense, NFC maxRead 224 |
+| ~~Capability-aware UI~~ | ~~Medium~~ | DONE (v0.13) — Runtime NFC/PC·SC detection, OCR-only mode, adaptive Landing/MRZ/Detail screens |
 | VIZ threshold tuning | Low | Tune similarity/quality thresholds with real passport data |
 
 ## Commit History

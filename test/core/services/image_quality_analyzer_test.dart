@@ -134,7 +134,7 @@ void main() {
     test('issues list identifies blur', () {
       final bytes = _createTestImage(pixelValue: (x, y) => 128);
       final metrics = analyzer.analyze(bytes);
-      expect(metrics.issues, contains('Image is blurry'));
+      expect(metrics.issues, contains(ImageQualityIssue.blurry));
     });
 
     test('issues list identifies glare', () {
@@ -142,7 +142,7 @@ void main() {
       final metrics = analyzer.analyze(bytes);
       expect(
         metrics.issues,
-        anyElement(contains('glare')),
+        anyOf(contains(ImageQualityIssue.severeGlare), contains(ImageQualityIssue.moderateGlare)),
       );
     });
   });
@@ -232,7 +232,7 @@ void main() {
       final rgba = ByteData(0);
       final metrics = analyzer.analyzeFromPixels(rgba, 0, 0);
       expect(metrics.overallScore, equals(0));
-      expect(metrics.issues, contains('Empty image'));
+      expect(metrics.issues, contains(ImageQualityIssue.emptyImage));
     });
   });
 }

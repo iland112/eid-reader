@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/accessible_colors.dart';
+import '../../../../core/utils/l10n_extension.dart';
 import '../../../passport_reader/domain/entities/face_comparison_result.dart';
 import '../../../passport_reader/domain/entities/image_quality_metrics.dart';
 import '../../../passport_reader/domain/entities/mrz_field_comparison.dart';
@@ -51,7 +53,7 @@ class VizVerificationCard extends StatelessWidget {
                 Icon(Icons.compare, size: 20, color: colorScheme.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'VIZ Verification',
+                  context.l10n.vizVerificationTitle,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         color: colorScheme.primary,
                         fontWeight: FontWeight.bold,
@@ -91,9 +93,9 @@ class VizVerificationCard extends StatelessWidget {
         // Side-by-side faces
         Row(
           children: [
-            Expanded(child: _buildFaceImage(context, vizFaceBytes, 'Camera')),
+            Expanded(child: _buildFaceImage(context, vizFaceBytes, context.l10n.vizFaceLabelCamera, semanticLabel: context.l10n.semanticCameraFace)),
             const SizedBox(width: 12),
-            Expanded(child: _buildFaceImage(context, chipFaceBytes, 'Chip')),
+            Expanded(child: _buildFaceImage(context, chipFaceBytes, context.l10n.vizFaceLabelChip, semanticLabel: context.l10n.semanticChipFace)),
           ],
         ),
         const SizedBox(height: 8),
@@ -107,8 +109,9 @@ class VizVerificationCard extends StatelessWidget {
   Widget _buildFaceImage(
     BuildContext context,
     Uint8List? imageBytes,
-    String label,
-  ) {
+    String label, {
+    String? semanticLabel,
+  }) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Column(
@@ -126,6 +129,7 @@ class VizVerificationCard extends StatelessWidget {
               ? Image.memory(
                   imageBytes,
                   fit: BoxFit.cover,
+                  semanticLabel: semanticLabel,
                   errorBuilder: (_, __, ___) => Icon(
                     Icons.person,
                     size: 40,
@@ -151,7 +155,10 @@ class VizVerificationCard extends StatelessWidget {
 
   Widget _buildMrzFieldsRow(BuildContext context) {
     final match = mrzFieldsMatch!;
-    final color = match ? Colors.green : Colors.red;
+    final brightness = Theme.of(context).brightness;
+    final color = match
+        ? AccessibleColors.success(brightness)
+        : AccessibleColors.error(brightness);
     return Row(
       children: [
         Icon(
@@ -161,7 +168,7 @@ class VizVerificationCard extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Text(
-          match ? 'MRZ fields match chip data' : 'MRZ fields mismatch',
+          match ? context.l10n.vizMrzFieldsMatch : context.l10n.vizMrzFieldsMismatch,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: color,
                 fontWeight: FontWeight.w500,
@@ -173,7 +180,10 @@ class VizVerificationCard extends StatelessWidget {
 
   Widget _buildMrzFieldsSection(BuildContext context) {
     final comparison = fieldComparison!;
-    final summaryColor = comparison.allMatch ? Colors.green : Colors.red;
+    final brightness = Theme.of(context).brightness;
+    final summaryColor = comparison.allMatch
+        ? AccessibleColors.success(brightness)
+        : AccessibleColors.error(brightness);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -188,7 +198,7 @@ class VizVerificationCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              'MRZ Fields: ${comparison.matchCount}/${comparison.totalFields} match',
+              context.l10n.vizMrzFieldsSummary(comparison.matchCount.toString(), comparison.totalFields.toString()),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: summaryColor,
                     fontWeight: FontWeight.w500,
@@ -206,7 +216,9 @@ class VizVerificationCard extends StatelessWidget {
                 Icon(
                   field.matches ? Icons.check : Icons.close,
                   size: 12,
-                  color: field.matches ? Colors.green : Colors.red,
+                  color: field.matches
+                      ? AccessibleColors.success(brightness)
+                      : AccessibleColors.error(brightness),
                 ),
                 const SizedBox(width: 6),
                 SizedBox(
@@ -223,7 +235,7 @@ class VizVerificationCard extends StatelessWidget {
                     child: Text(
                       '${field.ocrValue ?? "?"} \u2260 ${field.chipValue}',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: Colors.red,
+                            color: AccessibleColors.error(brightness),
                           ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -238,11 +250,12 @@ class VizVerificationCard extends StatelessWidget {
 
   Widget _buildQualityWarnings(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final brightness = Theme.of(context).brightness;
     final qualityColor = switch (imageQuality!.qualityLevel) {
-      ImageQualityLevel.good => Colors.green,
-      ImageQualityLevel.acceptable => Colors.orange,
-      ImageQualityLevel.poor => Colors.red,
-      ImageQualityLevel.unusable => Colors.red,
+      ImageQualityLevel.good => AccessibleColors.success(brightness),
+      ImageQualityLevel.acceptable => AccessibleColors.warning(brightness),
+      ImageQualityLevel.poor => AccessibleColors.error(brightness),
+      ImageQualityLevel.unusable => AccessibleColors.error(brightness),
     };
 
     return Column(
@@ -253,7 +266,7 @@ class VizVerificationCard extends StatelessWidget {
             Icon(Icons.image_search, size: 14, color: qualityColor),
             const SizedBox(width: 4),
             Text(
-              'Image Quality: ${imageQuality!.qualityLevel.name}',
+              context.l10n.vizImageQualityLabel(imageQuality!.qualityLevel.name),
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: qualityColor,
                     fontWeight: FontWeight.bold,
@@ -266,7 +279,7 @@ class VizVerificationCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(left: 18, bottom: 2),
             child: Text(
-              issue,
+              _imageQualityIssueToString(issue, context.l10n),
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -274,5 +287,17 @@ class VizVerificationCard extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  static String _imageQualityIssueToString(ImageQualityIssue issue, l10n) {
+    return switch (issue) {
+      ImageQualityIssue.blurry => l10n.qualityBlurry,
+      ImageQualityIssue.severeGlare => l10n.qualitySevereGlare,
+      ImageQualityIssue.moderateGlare => l10n.qualityModerateGlare,
+      ImageQualityIssue.rainbowPattern => l10n.qualityRainbow,
+      ImageQualityIssue.lowContrast => l10n.qualityLowContrast,
+      ImageQualityIssue.decodeFailed => l10n.qualityFailedDecode,
+      ImageQualityIssue.emptyImage => l10n.qualityEmptyImage,
+    };
   }
 }

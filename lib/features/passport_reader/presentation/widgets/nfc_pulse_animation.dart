@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/l10n_extension.dart';
 import '../providers/passport_reader_provider.dart';
 
 /// Animated NFC pulse effect with concentric ripple rings.
@@ -91,35 +92,55 @@ class _NfcPulseAnimationState extends State<NfcPulseAnimation>
 
     final ringColor = isError ? colorScheme.error : colorScheme.primary;
 
-    return SizedBox(
-      width: 200,
-      height: 200,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Ripple rings
-          if (!isDone)
-            CustomPaint(
-              size: const Size(200, 200),
-              painter: _RipplePainter(
-                animation: _controller,
-                color: ringColor,
-                ringCount: 3,
+    return Semantics(
+      liveRegion: true,
+      label: _semanticLabelForStep(context),
+      child: SizedBox(
+        width: 200,
+        height: 200,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Ripple rings
+            if (!isDone)
+              CustomPaint(
+                size: const Size(200, 200),
+                painter: _RipplePainter(
+                  animation: _controller,
+                  color: ringColor,
+                  ringCount: 3,
+                ),
               ),
-            ),
 
-          // Center circle with icon
-          _buildCenterIcon(colorScheme, isError, isDone),
-        ],
+            // Center circle with icon
+            _buildCenterIcon(colorScheme, isError, isDone),
+          ],
+        ),
       ),
     );
+  }
+
+  String _semanticLabelForStep(BuildContext context) {
+    final l10n = context.l10n;
+    return switch (widget.step) {
+      ReadingStep.idle => l10n.semanticNfcIdle,
+      ReadingStep.connecting => l10n.semanticNfcConnecting,
+      ReadingStep.authenticating => l10n.semanticNfcAuthenticating,
+      ReadingStep.readingDg1 => l10n.semanticNfcReadingPersonal,
+      ReadingStep.readingDg2 => l10n.semanticNfcReadingFace,
+      ReadingStep.readingSod => l10n.semanticNfcReadingSecurity,
+      ReadingStep.verifyingPa => l10n.semanticNfcVerifyingPa,
+      ReadingStep.verifyingViz => l10n.semanticNfcVerifyingViz,
+      ReadingStep.done => l10n.semanticNfcDone,
+      ReadingStep.error => l10n.semanticNfcError,
+    };
   }
 
   Widget _buildCenterIcon(ColorScheme colorScheme, bool isError, bool isDone) {
     final bgColor = isError
         ? colorScheme.error
         : isDone
-            ? Colors.green
+            ? colorScheme.tertiary
             : colorScheme.primary;
 
     final IconData icon;
@@ -162,7 +183,7 @@ class _NfcPulseAnimationState extends State<NfcPulseAnimation>
         color: isError
             ? colorScheme.onError
             : isDone
-                ? Colors.white
+                ? colorScheme.onTertiary
                 : colorScheme.onPrimary,
       ),
     );

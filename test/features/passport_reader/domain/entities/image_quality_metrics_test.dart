@@ -98,7 +98,7 @@ void main() {
         saturationStdDev: 0.1,
         contrastRatio: 0.4,
         overallScore: 0.7,
-        issues: ['test'],
+        issues: [ImageQualityIssue.blurry],
       );
       const m2 = ImageQualityMetrics(
         blurScore: 100,
@@ -106,7 +106,7 @@ void main() {
         saturationStdDev: 0.1,
         contrastRatio: 0.4,
         overallScore: 0.7,
-        issues: ['test'],
+        issues: [ImageQualityIssue.blurry],
       );
       expect(m1, equals(m2));
     });

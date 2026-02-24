@@ -34,6 +34,29 @@ class MrzUtils {
     }
   }
 
+  /// Formats a YYMMDD string with localized month abbreviations.
+  ///
+  /// [monthAbbreviations] must contain 12 entries (Jan–Dec equivalent).
+  /// Returns the raw string unchanged if it cannot be parsed.
+  static String formatDisplayDateLocalized(
+    String yymmdd, {
+    bool isDob = false,
+    required List<String> monthAbbreviations,
+  }) {
+    if (yymmdd.length != 6) return yymmdd;
+    try {
+      var date = parseYYMMDD(yymmdd);
+      if (isDob && date.isAfter(DateTime.now())) {
+        date = DateTime(date.year - 100, date.month, date.day);
+      }
+      final d = date.day.toString().padLeft(2, '0');
+      final m = monthAbbreviations[date.month - 1];
+      return '$d $m ${date.year}';
+    } catch (_) {
+      return yymmdd;
+    }
+  }
+
   /// Parses a YYMMDD string to DateTime (70-year pivot: 00-69 → 2000s, 70-99 → 1900s).
   static DateTime parseYYMMDD(String yymmdd) {
     final yy = int.parse(yymmdd.substring(0, 2));

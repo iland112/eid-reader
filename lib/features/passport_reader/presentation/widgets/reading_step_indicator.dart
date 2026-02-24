@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/l10n_extension.dart';
 import '../providers/passport_reader_provider.dart';
 
 /// Horizontal step indicator showing NFC reading phases.
@@ -24,28 +25,46 @@ class ReadingStepIndicator extends StatelessWidget {
     final phase = _phaseFor(step);
     final isError = step == ReadingStep.error;
 
+    final l10n = context.l10n;
     final steps = <_StepConfig>[
-      const _StepConfig('Connect', 0),
-      const _StepConfig('Auth', 1),
-      const _StepConfig('Read', 2),
-      const _StepConfig('Verify', 3),
-      if (showVizStep) const _StepConfig('VIZ', 4),
+      _StepConfig(l10n.stepLabelConnect, 0),
+      _StepConfig(l10n.stepLabelAuth, 1),
+      _StepConfig(l10n.stepLabelRead, 2),
+      _StepConfig(l10n.stepLabelVerify, 3),
+      if (showVizStep) _StepConfig(l10n.stepLabelViz, 4),
     ];
+
+    final currentPhaseIndex = _phaseFor(step) + 1;
+    final totalSteps = steps.length;
+    final currentLabel = currentPhaseIndex > 0 && currentPhaseIndex <= totalSteps
+        ? steps[currentPhaseIndex - 1].label
+        : steps.last.label;
 
     final widgets = <Widget>[];
     for (int i = 0; i < steps.length; i++) {
       if (i > 0) {
         widgets.add(_StepConnector(completed: phase > steps[i - 1].phase));
       }
-      widgets.add(_StepDot(
-        label: steps[i].label,
-        state: _dotState(steps[i].phase, phase, isError),
+      widgets.add(ExcludeSemantics(
+        child: _StepDot(
+          label: steps[i].label,
+          state: _dotState(steps[i].phase, phase, isError),
+        ),
       ));
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(children: widgets),
+    return Semantics(
+      label: l10n.semanticStepProgress(
+        currentPhaseIndex.toString(),
+        totalSteps.toString(),
+        currentLabel,
+      ),
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(children: widgets),
+        ),
+      ),
     );
   }
 

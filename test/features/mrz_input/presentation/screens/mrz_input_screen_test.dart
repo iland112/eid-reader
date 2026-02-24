@@ -1,10 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:eid_reader/app/device_capability_provider.dart';
 import 'package:eid_reader/features/mrz_input/domain/entities/mrz_data.dart';
 import 'package:eid_reader/features/mrz_input/presentation/providers/mrz_input_provider.dart';
 import 'package:eid_reader/features/mrz_input/presentation/screens/mrz_input_screen.dart';
@@ -16,6 +18,7 @@ final bool _isDesktop =
 Widget _buildTestApp({
   List<Override> overrides = const [],
   GoRouter? router,
+  ChipReaderCapability capability = ChipReaderCapability.nfcEnabled,
 }) {
   final testRouter = router ??
       GoRouter(
@@ -38,12 +41,25 @@ Widget _buildTestApp({
             builder: (context, state) =>
                 const Scaffold(body: Text('Scan')),
           ),
+          GoRoute(
+            path: '/passport-detail',
+            name: 'passport-detail',
+            builder: (context, state) =>
+                const Scaffold(body: Text('Passport Detail')),
+          ),
         ],
       );
 
   return ProviderScope(
-    overrides: overrides,
+    overrides: [
+      chipReaderCapabilityProvider
+          .overrideWith((ref) => Future.value(capability)),
+      ...overrides,
+    ],
     child: MaterialApp.router(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: testRouter,
     ),
   );
@@ -55,7 +71,7 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      expect(find.text('eID Reader'), findsOneWidget);
+      expect(find.text('Passport Reader'), findsOneWidget);
     });
 
     testWidgets('renders instruction text when no camera data',
@@ -115,8 +131,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Document number is required'), findsOneWidget);
-      expect(find.text('Date of birth is required'), findsOneWidget);
-      expect(find.text('Date of expiry is required'), findsOneWidget);
+      expect(find.text('Date is required'), findsNWidgets(2));
     });
 
     testWidgets('shows date format error for partial input', (tester) async {
@@ -210,6 +225,51 @@ void main() {
 
       expect(find.byIcon(Icons.share), findsOneWidget);
       expect(find.byTooltip('Share debug log'), findsOneWidget);
+    });
+
+    testWidgets('shows OCR-only banner when no chip reader', (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(capability: ChipReaderCapability.none));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+            'NFC not available. Camera scan will show MRZ data only.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('shows NFC disabled banner when NFC disabled', (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(capability: ChipReaderCapability.nfcDisabled));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+            'NFC is disabled. Enable NFC to read e-Passport chip data.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('shows View Passport Info button in OCR-only mode',
+        (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(capability: ChipReaderCapability.none));
+      await tester.pumpAndSettle();
+
+      expect(find.text('View Passport Info'), findsOneWidget);
+      // Should NOT show Scan Passport button
+      expect(find.text('Scan Passport'), findsNothing);
+    });
+
+    testWidgets('hides Scan Passport button when no chip reader',
+        (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(capability: ChipReaderCapability.none));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Scan Passport'), findsNothing);
+      expect(find.byIcon(Icons.contactless), findsNothing);
     });
 
     testWidgets('shows VIZ scan result card when camera data available',

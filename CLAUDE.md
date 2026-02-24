@@ -49,12 +49,14 @@ feature/
 ### Navigation Flow
 
 ```
-MRZ Input ──→ NFC Scan ──→ Passport Detail
-    ↕
+                ┌──→ NFC/PC·SC Scan ──→ Passport Detail (e-Passport)
+MRZ Input ──────┤
+    ↕            └──→ Passport Detail (OCR-only, no chip reader)
 MRZ Camera Scan
 ```
 
-Routes: `/mrz-input` → `/mrz-camera` (optional) → `/nfc-scan` → `/passport-detail`
+Routes: `/mrz-input` → `/mrz-camera` (optional) → `/scan` → `/passport-detail`
+OCR-only: `/mrz-input` → `/passport-detail` (direct, via `MrzData.toPassportData()`)
 
 ### Multi-Platform Abstraction
 
@@ -145,7 +147,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - Never expose raw exception messages to users.
 
 ### Testing
-- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **399 tests across 35 files.**
+- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **476 tests across 37 files.**
 - **Manual mock pattern** (no mockito codegen due to analyzer 7.x incompatibility).
 - Use Riverpod `ProviderContainer` overrides for dependency injection in tests.
 - For `MethodChannel` testing, use `TestDefaultBinaryMessengerBinding`.
@@ -175,6 +177,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `lib/core/platform/fast_nfc_provider.dart` - Optimized NFC ComProvider (skips NDEF, custom haptic)
 - `lib/core/platform/secure_screen_service.dart` - FLAG_SECURE abstraction + MethodChannel impl (available, not active)
 - `lib/core/utils/country_code_utils.dart` - ISO 3166-1 alpha-3 → alpha-2 mapping (249+ countries)
+- `lib/app/device_capability_provider.dart` - Runtime NFC/PC·SC capability detection (Riverpod FutureProvider)
 - `lib/app/theme_mode_provider.dart` - Dark/light mode toggle (Riverpod StateNotifier)
 - `lib/features/passport_reader/presentation/widgets/nfc_pulse_animation.dart` - Animated NFC pulse rings via CustomPainter
 - `lib/features/passport_reader/presentation/widgets/reading_step_indicator.dart` - 5-phase step indicator (Connect → Auth → Read → Verify → VIZ)

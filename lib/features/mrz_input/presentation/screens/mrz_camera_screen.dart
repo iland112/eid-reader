@@ -12,6 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/services/debug_log_service.dart';
+import '../../../../core/utils/l10n_extension.dart';
 import '../../../../core/utils/mrz_utils.dart';
 import '../../../../core/utils/nv21_utils.dart';
 import '../../domain/entities/mrz_data.dart';
@@ -59,18 +60,18 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
       if (!mounted) return;
       if (status.isDenied) {
         setState(
-            () => _initError = 'Camera permission denied. Please allow camera access to scan MRZ.');
+            () => _initError = context.l10n.mrzCameraErrorPermissionDenied);
         return;
       }
       if (status.isPermanentlyDenied) {
         setState(() =>
-            _initError = 'Camera permission permanently denied. Please enable it in Settings.');
+            _initError = context.l10n.mrzCameraErrorPermissionPermanent);
         return;
       }
 
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        setState(() => _initError = 'No cameras available');
+        setState(() => _initError = context.l10n.mrzCameraErrorNoCamera);
         return;
       }
 
@@ -102,7 +103,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
       _startImageStream();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _initError = 'Camera initialization failed');
+      setState(() => _initError = context.l10n.mrzCameraErrorInitFailed);
     }
   }
 
@@ -453,7 +454,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Flashlight not available')),
+          SnackBar(content: Text(context.l10n.mrzCameraFlashlightUnavailable)),
         );
       }
     }
@@ -488,20 +489,20 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scan Passport'),
+        title: Text(context.l10n.mrzCameraTitle),
         actions: [
           if (kDebugMode)
             IconButton(
               icon: Icon(
                 _showDebugLog ? Icons.bug_report : Icons.bug_report_outlined,
               ),
-              tooltip: _showDebugLog ? 'Hide debug log' : 'Show debug log',
+              tooltip: _showDebugLog ? context.l10n.mrzCameraTooltipHideDebug : context.l10n.mrzCameraTooltipShowDebug,
               onPressed: () => setState(() => _showDebugLog = !_showDebugLog),
             ),
           if (_isInitialized)
             IconButton(
               icon: Icon(_isTorchOn ? Icons.flash_on : Icons.flash_off),
-              tooltip: _isTorchOn ? 'Turn off flashlight' : 'Turn on flashlight',
+              tooltip: _isTorchOn ? context.l10n.mrzCameraTooltipTorchOn : context.l10n.mrzCameraTooltipTorchOff,
               onPressed: _toggleTorch,
             ),
         ],
@@ -541,11 +542,11 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
                 style: Theme.of(context).textTheme.bodyLarge,
                 textAlign: TextAlign.center,
               ),
-              if (_initError!.contains('Settings')) ...[
+              if (_initError == context.l10n.mrzCameraErrorPermissionPermanent) ...[
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () => openAppSettings(),
-                  child: const Text('Open Settings'),
+                  child: Text(context.l10n.mrzCameraOpenSettings),
                 ),
               ],
             ],
@@ -555,8 +556,11 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
     }
 
     if (!_isInitialized || _cameraController == null) {
-      return const Center(
-        child: CircularProgressIndicator(),
+      return Center(
+        child: Semantics(
+          label: context.l10n.semanticLoadingCamera,
+          child: const CircularProgressIndicator(),
+        ),
       );
     }
 
@@ -680,45 +684,47 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
           boxWidth = boxHeight / passportAspect;
         }
 
-        return CustomPaint(
-          painter: _PassportOverlayPainter(
-            boxWidth: boxWidth,
-            boxHeight: boxHeight,
-          ),
-          child: Center(
-            child: SizedBox(
-              width: boxWidth,
-              height: boxHeight,
-              child: DecoratedBox(
-                decoration: const BoxDecoration(
-                  border: Border.fromBorderSide(
-                    BorderSide(
-                      color: Colors.white70,
-                      width: 2,
-                    ),
-                  ),
-                  borderRadius: BorderRadius.all(Radius.circular(8)),
-                ),
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    decoration: const BoxDecoration(
-                      color: Colors.black38,
-                      borderRadius: BorderRadius.only(
-                        bottomLeft: Radius.circular(6),
-                        bottomRight: Radius.circular(6),
+        return ExcludeSemantics(
+          child: CustomPaint(
+            painter: _PassportOverlayPainter(
+              boxWidth: boxWidth,
+              boxHeight: boxHeight,
+            ),
+            child: Center(
+              child: SizedBox(
+                width: boxWidth,
+                height: boxHeight,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    border: Border.fromBorderSide(
+                      BorderSide(
+                        color: Colors.white70,
+                        width: 2,
                       ),
                     ),
-                    child: const Text(
-                      'VIZ',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2,
+                    borderRadius: BorderRadius.all(Radius.circular(8)),
+                  ),
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      decoration: const BoxDecoration(
+                        color: Colors.black38,
+                        borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(6),
+                          bottomRight: Radius.circular(6),
+                        ),
+                      ),
+                      child: Text(
+                        context.l10n.mrzCameraVizLabel,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                        ),
                       ),
                     ),
                   ),
@@ -751,7 +757,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
           const SizedBox(height: 4),
         const SizedBox(height: 12),
         Text(
-          'Position the passport data page within the frame',
+          context.l10n.mrzCameraPositionInstruction,
           style: Theme.of(context).textTheme.bodyMedium,
           textAlign: TextAlign.center,
         ),
@@ -773,7 +779,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
             ),
             const SizedBox(width: 8),
             Text(
-              'MRZ Detected',
+              context.l10n.mrzCameraMrzDetected,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Theme.of(context).colorScheme.primary,
                   ),
@@ -799,19 +805,19 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
                 children: [
                   if (data.surname != null)
                     _buildField(
-                      'Name',
+                      context.l10n.labelName,
                       data.givenNames != null && data.givenNames!.isNotEmpty
                           ? '${data.givenNames} ${data.surname}'
                           : data.surname!,
                     ),
-                  _buildField('Document No.', data.documentNumber),
+                  _buildField(context.l10n.labelDocumentNo, data.documentNumber),
                   if (data.nationality != null)
-                    _buildField('Nationality', data.nationality!),
-                  _buildField('Date of Birth',
+                    _buildField(context.l10n.labelNationality, data.nationality!),
+                  _buildField(context.l10n.labelDateOfBirth,
                       MrzUtils.formatDisplayDate(data.dateOfBirth, isDob: true)),
                   if (data.sex != null && data.sex!.isNotEmpty)
-                    _buildField('Sex', data.sex!),
-                  _buildField('Date of Expiry',
+                    _buildField(context.l10n.labelSex, data.sex!),
+                  _buildField(context.l10n.labelDateOfExpiry,
                       MrzUtils.formatDisplayDate(data.dateOfExpiry)),
                 ],
               ),
@@ -831,7 +837,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
                     _startImageStream();
                   }
                 },
-                child: const Text('Rescan'),
+                child: Text(context.l10n.mrzCameraButtonRescan),
               ),
             ),
             const SizedBox(width: 12),
@@ -846,7 +852,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
                         height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Use This Data'),
+                    : Text(context.l10n.mrzCameraButtonUseData),
               ),
             ),
           ],
@@ -902,6 +908,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
           ? Image.memory(
               faceBytes,
               fit: BoxFit.cover,
+              semanticLabel: context.l10n.semanticFacePreview,
               errorBuilder: (_, __, ___) => Icon(
                 Icons.person,
                 size: 32,
@@ -937,24 +944,24 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
       case VizCaptureStatus.detectingFace:
         icon = Icons.face;
         color = Theme.of(context).colorScheme.outline;
-        text = 'Detecting face...';
+        text = context.l10n.mrzCameraDetectingFace;
       case VizCaptureStatus.ready:
         final quality = cameraState.vizCapture?.qualityMetrics;
         icon = Icons.face;
         color = Theme.of(context).colorScheme.primary;
         if (quality != null && quality.issues.isNotEmpty) {
-          text = 'Face captured (${quality.issues.first})';
+          text = context.l10n.mrzCameraFaceCapturedWithIssue(quality.issues.first.name);
         } else {
-          text = 'Face captured';
+          text = context.l10n.mrzCameraFaceCaptured;
         }
       case VizCaptureStatus.noFace:
         icon = Icons.face_retouching_off;
         color = Theme.of(context).colorScheme.error;
-        text = 'No face detected';
+        text = context.l10n.mrzCameraNoFaceDetected;
       case VizCaptureStatus.error:
         icon = Icons.warning_amber;
         color = Theme.of(context).colorScheme.error;
-        text = 'Face detection failed';
+        text = context.l10n.mrzCameraFaceDetectionFailed;
     }
 
     return Padding(

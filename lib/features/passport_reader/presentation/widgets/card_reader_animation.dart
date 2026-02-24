@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/l10n_extension.dart';
 import '../providers/passport_reader_provider.dart';
 
 /// Animated card reader icon for Desktop PC/SC scanning screen.
@@ -61,60 +62,80 @@ class _CardReaderAnimationState extends State<CardReaderAnimation>
     final isDone = widget.step == ReadingStep.done;
     final isError = widget.step == ReadingStep.error;
 
-    return SizedBox(
-      width: 160,
-      height: 160,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final pulseScale = isActive && !isDone
-              ? 1.0 + sin(_controller.value * 2 * pi) * 0.03
-              : 1.0;
+    return Semantics(
+      liveRegion: true,
+      label: _semanticLabelForStep(context),
+      child: SizedBox(
+        width: 160,
+        height: 160,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            final pulseScale = isActive && !isDone
+                ? 1.0 + sin(_controller.value * 2 * pi) * 0.03
+                : 1.0;
 
-          return Transform.scale(
-            scale: pulseScale,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Pulse rings (during active read)
-                if (isActive && !isDone)
-                  _PulseRing(
-                    progress: _controller.value,
-                    color: colorScheme.primary.withValues(alpha: 0.15),
-                    size: 160,
+            return Transform.scale(
+              scale: pulseScale,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Pulse rings (during active read)
+                  if (isActive && !isDone)
+                    _PulseRing(
+                      progress: _controller.value,
+                      color: colorScheme.primary.withValues(alpha: 0.15),
+                      size: 160,
+                    ),
+                  // Main icon
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isDone
+                          ? colorScheme.primaryContainer
+                          : isError
+                              ? colorScheme.errorContainer
+                              : colorScheme.surfaceContainerHigh,
+                    ),
+                    child: Icon(
+                      isDone
+                          ? Icons.check_circle_outline
+                          : isError
+                              ? Icons.error_outline
+                              : Icons.credit_card,
+                      size: 48,
+                      color: isDone
+                          ? colorScheme.primary
+                          : isError
+                              ? colorScheme.error
+                              : colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                // Main icon
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isDone
-                        ? colorScheme.primaryContainer
-                        : isError
-                            ? colorScheme.errorContainer
-                            : colorScheme.surfaceContainerHigh,
-                  ),
-                  child: Icon(
-                    isDone
-                        ? Icons.check_circle_outline
-                        : isError
-                            ? Icons.error_outline
-                            : Icons.credit_card,
-                    size: 48,
-                    color: isDone
-                        ? colorScheme.primary
-                        : isError
-                            ? colorScheme.error
-                            : colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
+  }
+
+  String _semanticLabelForStep(BuildContext context) {
+    final l10n = context.l10n;
+    return switch (widget.step) {
+      ReadingStep.idle => l10n.semanticCardReaderIdle,
+      ReadingStep.connecting => l10n.semanticCardReaderConnecting,
+      ReadingStep.authenticating ||
+      ReadingStep.readingDg1 ||
+      ReadingStep.readingDg2 ||
+      ReadingStep.readingSod ||
+      ReadingStep.verifyingPa ||
+      ReadingStep.verifyingViz => l10n.semanticCardReaderReading,
+      ReadingStep.done => l10n.semanticCardReaderDone,
+      ReadingStep.error => l10n.semanticCardReaderError,
+    };
   }
 }
 

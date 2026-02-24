@@ -9,6 +9,7 @@ import 'package:eid_reader/features/passport_reader/data/datasources/passport_da
 import 'package:eid_reader/features/passport_reader/data/datasources/passport_read_result.dart';
 import 'package:eid_reader/features/passport_reader/domain/entities/pa_verification_result.dart';
 import 'package:eid_reader/features/passport_reader/domain/entities/passport_data.dart';
+import 'package:eid_reader/features/passport_reader/domain/entities/passport_read_error.dart';
 import 'package:eid_reader/features/passport_reader/presentation/providers/passport_reader_provider.dart';
 
 /// Manual mock for [PassportDatasource] returning [PassportReadResult].
@@ -187,7 +188,7 @@ void main() {
 
       expect(notifier.state.step, ReadingStep.error);
       expect(notifier.state.data, isNull);
-      expect(notifier.state.errorMessage, contains('Connection lost'));
+      expect(notifier.state.error, PassportReadError.tagLost);
     });
 
     test('readPassport sets error state on authentication failure', () async {
@@ -196,7 +197,7 @@ void main() {
       await notifier.readPassport(_testMrzData);
 
       expect(notifier.state.step, ReadingStep.error);
-      expect(notifier.state.errorMessage, contains('Authentication failed'));
+      expect(notifier.state.error, PassportReadError.authFailed);
     });
 
     test('readPassport sets error state on timeout', () async {
@@ -205,7 +206,7 @@ void main() {
       await notifier.readPassport(_testMrzData);
 
       expect(notifier.state.step, ReadingStep.error);
-      expect(notifier.state.errorMessage, contains('timed out'));
+      expect(notifier.state.error, PassportReadError.timeout);
     });
 
     test('readPassport sets generic error for unknown exceptions', () async {
@@ -214,7 +215,7 @@ void main() {
       await notifier.readPassport(_testMrzData);
 
       expect(notifier.state.step, ReadingStep.error);
-      expect(notifier.state.errorMessage, contains('Could not read passport'));
+      expect(notifier.state.error, PassportReadError.generic);
     });
 
     test('reset after readPassport clears state', () async {

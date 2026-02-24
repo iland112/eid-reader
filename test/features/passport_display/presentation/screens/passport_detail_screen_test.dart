@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -41,6 +42,9 @@ const _verifiedPassportData = PassportData(
 Widget _buildTestApp({required PassportData passportData}) {
   return ProviderScope(
     child: MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: PassportDetailScreen(passportData: passportData),
     ),
   );
@@ -54,7 +58,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Passport Details'), findsOneWidget);
+      expect(find.text('e-Passport Details'), findsOneWidget);
     });
 
     testWidgets('renders personal information section', (tester) async {
@@ -177,6 +181,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             navigatorKey: navKey,
             home: PassportDetailScreen(passportData: data),
           ),
@@ -324,6 +331,82 @@ void main() {
       expect(find.text('PA Verification Details'), findsOneWidget);
       expect(find.text('Error'), findsOneWidget);
       expect(find.text('SOD parsing failed'), findsOneWidget);
+    });
+  });
+
+  group('PassportDetailScreen OCR-only mode', () {
+    const ocrPassportData = PassportData(
+      surname: 'DOE',
+      givenNames: 'JOHN',
+      documentNumber: 'L898902C',
+      nationality: 'USA',
+      dateOfBirth: '690806',
+      sex: 'M',
+      dateOfExpiry: '940623',
+      issuingState: 'USA',
+      documentType: 'P',
+      authProtocol: 'OCR',
+    );
+
+    testWidgets('renders OCR title', (tester) async {
+      await tester.pumpWidget(
+        _buildTestApp(passportData: ocrPassportData),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Passport Info (OCR)'), findsOneWidget);
+    });
+
+    testWidgets('renders OCR badge instead of security badge', (tester) async {
+      await tester.pumpWidget(
+        _buildTestApp(passportData: ocrPassportData),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('OCR Scan Only'), findsOneWidget);
+      expect(find.byIcon(Icons.document_scanner), findsOneWidget);
+      expect(find.text('Verification Pending'), findsNothing);
+    });
+
+    testWidgets('renders personal and document sections', (tester) async {
+      await tester.pumpWidget(
+        _buildTestApp(passportData: ocrPassportData),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Personal Information'), findsOneWidget);
+      expect(find.text('Document Details'), findsOneWidget);
+    });
+
+    testWidgets('hides security status section', (tester) async {
+      await tester.pumpWidget(
+        _buildTestApp(passportData: ocrPassportData),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Security Status'), findsNothing);
+    });
+
+    testWidgets('hides PA verification section', (tester) async {
+      await tester.pumpWidget(
+        _buildTestApp(passportData: ocrPassportData),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('PA Verification Details'), findsNothing);
+    });
+
+    testWidgets('shows OCR badge description', (tester) async {
+      await tester.pumpWidget(
+        _buildTestApp(passportData: ocrPassportData),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+            'This data was read from MRZ only. Chip verification not available.'),
+        findsOneWidget,
+      );
     });
   });
 }

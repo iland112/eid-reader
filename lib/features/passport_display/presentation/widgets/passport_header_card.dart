@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../core/utils/country_code_utils.dart';
+import '../../../../core/utils/l10n_extension.dart';
 import '../../../passport_reader/domain/entities/passport_data.dart';
 import 'expiry_date_badge.dart';
 
@@ -51,11 +52,17 @@ class PassportHeaderCard extends StatelessWidget {
                         child: Image.memory(
                           passportData.faceImageBytes!,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
-                              const Icon(Icons.person, size: 48),
+                          semanticLabel: context.l10n.semanticPassportPhoto,
+                          errorBuilder: (_, __, ___) => Semantics(
+                            label: context.l10n.semanticNoPhotoAvailable,
+                            child: const Icon(Icons.person, size: 48),
+                          ),
                         ),
                       )
-                    : const Icon(Icons.person, size: 48),
+                    : Semantics(
+                        label: context.l10n.semanticNoPhotoAvailable,
+                        child: const Icon(Icons.person, size: 48),
+                      ),
               ),
             ),
             const SizedBox(width: 16),
@@ -135,6 +142,7 @@ class _NationalityBadge extends StatelessWidget {
                 width: 20,
                 height: 14,
                 fit: BoxFit.cover,
+                semanticsLabel: context.l10n.semanticFlagOf(nationality),
               ),
             ),
             const SizedBox(width: 6),

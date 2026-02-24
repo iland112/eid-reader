@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/utils/l10n_extension.dart';
 import '../features/mrz_input/domain/entities/mrz_data.dart';
 import '../features/mrz_input/presentation/screens/mrz_camera_screen.dart';
+import '../features/landing/presentation/screens/landing_screen.dart';
 import '../features/mrz_input/presentation/screens/mrz_input_screen.dart';
 import '../features/passport_reader/data/datasources/passport_datasource_factory.dart';
 import '../features/passport_reader/domain/entities/passport_data.dart';
@@ -13,12 +15,33 @@ import '../features/passport_display/presentation/screens/passport_detail_screen
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    initialLocation: '/mrz-input',
+    initialLocation: '/',
     routes: [
+      GoRoute(
+        path: '/',
+        name: 'landing',
+        pageBuilder: (context, state) => CustomTransitionPage(
+          key: state.pageKey,
+          child: const LandingScreen(),
+          transitionsBuilder:
+              (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
+      ),
       GoRoute(
         path: '/mrz-input',
         name: 'mrz-input',
-        builder: (context, state) => const MrzInputScreen(),
+        pageBuilder: (context, state) => CustomTransitionPage(
+          key: state.pageKey,
+          child: const MrzInputScreen(),
+          transitionsBuilder:
+              (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
       ),
       GoRoute(
         path: '/mrz-camera',
@@ -31,8 +54,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) {
           final mrzData = state.extra;
           if (mrzData is! MrzData) {
-            return const MaterialPage(
-              child: Scaffold(body: Center(child: Text('Missing MRZ data'))),
+            return MaterialPage(
+              child: Scaffold(
+                  body: Center(
+                      child: Text(context.l10n.routeErrorMissingMrz))),
             );
           }
 
@@ -68,9 +93,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) {
           final passportData = state.extra;
           if (passportData is! PassportData) {
-            return const MaterialPage(
+            return MaterialPage(
               child: Scaffold(
-                  body: Center(child: Text('Missing passport data'))),
+                  body: Center(
+                      child: Text(context.l10n.routeErrorMissingPassport))),
             );
           }
           return CustomTransitionPage(
@@ -87,7 +113,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(
-        child: Text('Page not found: ${state.uri}'),
+        child: Text(context.l10n.routeErrorPageNotFound(
+            state.uri.toString())),
       ),
     ),
   );

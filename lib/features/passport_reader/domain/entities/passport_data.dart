@@ -67,6 +67,9 @@ class PassportData extends Equatable {
 
   String get fullName => '$givenNames $surname';
 
+  /// Whether this data was obtained via OCR only (no chip reading).
+  bool get isOcrOnly => authProtocol == 'OCR';
+
   PassportData copyWith({
     String? surname,
     String? givenNames,

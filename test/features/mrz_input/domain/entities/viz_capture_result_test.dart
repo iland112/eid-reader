@@ -68,7 +68,7 @@ void main() {
           saturationStdDev: 0.35,
           contrastRatio: 0.1,
           overallScore: 0.2,
-          issues: ['Image is blurry', 'Severe glare detected'],
+          issues: [ImageQualityIssue.blurry, ImageQualityIssue.severeGlare],
         ),
       );
       expect(result.qualityMetrics.issues, hasLength(2));

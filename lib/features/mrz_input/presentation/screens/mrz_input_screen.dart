@@ -7,9 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../../app/device_capability_provider.dart';
+import '../../../../app/locale_provider.dart';
 import '../../../../app/theme_mode_provider.dart';
 import '../../../../core/services/debug_log_service.dart';
+import '../../../../core/utils/l10n_extension.dart';
 import '../../domain/entities/mrz_data.dart';
+import '../../domain/entities/validation_error.dart';
 import '../../domain/usecases/validate_mrz.dart';
 import '../providers/mrz_input_provider.dart';
 import '../widgets/viz_scan_result_card.dart';
@@ -21,7 +25,8 @@ class MrzInputScreen extends ConsumerStatefulWidget {
   ConsumerState<MrzInputScreen> createState() => _MrzInputScreenState();
 }
 
-class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
+class _MrzInputScreenState extends ConsumerState<MrzInputScreen>
+    with SingleTickerProviderStateMixin {
   static final bool _isDesktop =
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
   final _formKey = GlobalKey<FormState>();
@@ -30,8 +35,55 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
   final _doeController = TextEditingController();
   final _validateMrz = ValidateMrz();
 
+  late final AnimationController _animController;
+  late final Animation<double> _instructionFade;
+  late final Animation<Offset> _instructionSlide;
+  late final Animation<double> _formFade;
+  late final Animation<Offset> _formSlide;
+  late final Animation<double> _buttonsFade;
+  late final Animation<Offset> _buttonsSlide;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _instructionFade = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+    );
+    _instructionSlide = Tween(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(_instructionFade);
+
+    _formFade = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.15, 0.65, curve: Curves.easeOut),
+    );
+    _formSlide = Tween(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(_formFade);
+
+    _buttonsFade = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.3, 0.8, curve: Curves.easeOut),
+    );
+    _buttonsSlide = Tween(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(_buttonsFade);
+
+    _animController.forward();
+  }
+
   @override
   void dispose() {
+    _animController.dispose();
     _docNumberController.dispose();
     _dobController.dispose();
     _doeController.dispose();
@@ -54,7 +106,7 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
     await DebugLogService.instance.flush();
     await Share.shareXFiles(
       [XFile(path)],
-      text: 'eID Reader debug log',
+      text: context.l10n.shareLogText,
     );
   }
 
@@ -65,18 +117,33 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
     context.pushNamed('scan', extra: mrzData);
   }
 
+  void _onViewOcrResult() {
+    if (!_formKey.currentState!.validate()) return;
+
+    final mrzData = ref.read(mrzInputProvider).toMrzData();
+    final passportData = mrzData.toPassportData();
+    context.pushNamed('passport-detail', extra: passportData);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('eID Reader'),
+        title: Text(l10n.mrzInputTitle),
         actions: [
           if (kDebugMode)
             IconButton(
               icon: const Icon(Icons.share),
-              tooltip: 'Share debug log',
+              tooltip: l10n.mrzInputTooltipShareLog,
               onPressed: _shareLogFile,
             ),
+          IconButton(
+            icon: const Icon(Icons.language),
+            tooltip: l10n.mrzInputTooltipSwitchLang,
+            onPressed: () =>
+                ref.read(localeProvider.notifier).toggle(),
+          ),
           IconButton(
             icon: Icon(
               Theme.of(context).brightness == Brightness.dark
@@ -84,8 +151,8 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
                   : Icons.dark_mode,
             ),
             tooltip: Theme.of(context).brightness == Brightness.dark
-                ? 'Switch to light mode'
-                : 'Switch to dark mode',
+                ? l10n.mrzInputTooltipLightMode
+                : l10n.mrzInputTooltipDarkMode,
             onPressed: () =>
                 ref.read(themeModeProvider.notifier).toggle(),
           ),
@@ -99,30 +166,68 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // VIZ scan result or instruction text
-              if (ref.watch(mrzInputProvider).cameraMrzData != null)
-                VizScanResultCard(
-                    mrzData: ref.watch(mrzInputProvider).cameraMrzData!)
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    _isDesktop
-                        ? 'Enter passport MRZ data to read the '
-                          'e-Passport chip.'
-                        : 'Scan the passport VIZ, or enter MRZ '
-                          'data manually.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
-                        ),
-                    textAlign: TextAlign.center,
+              FadeTransition(
+                opacity: _instructionFade,
+                child: SlideTransition(
+                  position: _instructionSlide,
+                  child: Column(
+                    children: [
+                      // Capability banners
+                      Builder(builder: (context) {
+                        final capAsync =
+                            ref.watch(chipReaderCapabilityProvider);
+                        final capability = capAsync.valueOrNull;
+                        if (capability == ChipReaderCapability.nfcDisabled) {
+                          return _CapabilityBanner(
+                            icon: Icons.nfc,
+                            message: l10n.mrzInputNfcDisabledBanner,
+                            color: Theme.of(context).colorScheme.error,
+                          );
+                        }
+                        if (capability == ChipReaderCapability.none) {
+                          return _CapabilityBanner(
+                            icon: Icons.info_outline,
+                            message: l10n.mrzInputOcrOnlyBanner,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      }),
+                      ref.watch(mrzInputProvider).cameraMrzData != null
+                          ? VizScanResultCard(
+                              mrzData:
+                                  ref.watch(mrzInputProvider).cameraMrzData!)
+                          : Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Text(
+                                _isDesktop
+                                    ? l10n.mrzInputInstructionDesktop
+                                    : l10n.mrzInputInstructionMobile,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                    ],
                   ),
                 ),
+              ),
               const SizedBox(height: 16),
 
               // Form fields in a card
-              Card(
+              FadeTransition(
+                opacity: _formFade,
+                child: SlideTransition(
+                  position: _formSlide,
+                  child: Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -133,10 +238,10 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
                     children: [
               TextFormField(
                 controller: _docNumberController,
-                decoration: const InputDecoration(
-                  labelText: 'Document Number',
-                  hintText: 'e.g. M12345678',
-                  prefixIcon: Icon(Icons.badge),
+                decoration: InputDecoration(
+                  labelText: l10n.labelDocumentNumber,
+                  hintText: l10n.hintDocumentNumber,
+                  prefixIcon: const Icon(Icons.badge),
                 ),
                 textCapitalization: TextCapitalization.characters,
                 inputFormatters: [
@@ -144,17 +249,18 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
                   LengthLimitingTextInputFormatter(9),
                 ],
                 validator: (value) =>
-                    _validateMrz.validateDocumentNumber(value ?? ''),
+                    _validationErrorToString(
+                        _validateMrz.validateDocumentNumber(value ?? '')),
                 onChanged: (value) =>
                     ref.read(mrzInputProvider.notifier).updateDocumentNumber(value),
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _dobController,
-                decoration: const InputDecoration(
-                  labelText: 'Date of Birth',
-                  hintText: 'YYMMDD (e.g. 900115)',
-                  prefixIcon: Icon(Icons.cake),
+                decoration: InputDecoration(
+                  labelText: l10n.labelDateOfBirth,
+                  hintText: l10n.hintDateOfBirth,
+                  prefixIcon: const Icon(Icons.cake),
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [
@@ -162,17 +268,18 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
                   LengthLimitingTextInputFormatter(6),
                 ],
                 validator: (value) =>
-                    _validateMrz.validateDate(value ?? '', fieldName: 'Date of birth'),
+                    _validationErrorToString(
+                        _validateMrz.validateDate(value ?? '')),
                 onChanged: (value) =>
                     ref.read(mrzInputProvider.notifier).updateDateOfBirth(value),
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _doeController,
-                decoration: const InputDecoration(
-                  labelText: 'Date of Expiry',
-                  hintText: 'YYMMDD (e.g. 300115)',
-                  prefixIcon: Icon(Icons.event),
+                decoration: InputDecoration(
+                  labelText: l10n.labelDateOfExpiry,
+                  hintText: l10n.hintDateOfExpiry,
+                  prefixIcon: const Icon(Icons.event),
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [
@@ -180,7 +287,8 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
                   LengthLimitingTextInputFormatter(6),
                 ],
                 validator: (value) =>
-                    _validateMrz.validateDate(value ?? '', fieldName: 'Date of expiry'),
+                    _validationErrorToString(
+                        _validateMrz.validateDate(value ?? '')),
                 onChanged: (value) =>
                     ref.read(mrzInputProvider.notifier).updateDateOfExpiry(value),
               ),
@@ -188,26 +296,122 @@ class _MrzInputScreenState extends ConsumerState<MrzInputScreen> {
                   ),
                 ),
               ),
+              ),
+              ),
               const SizedBox(height: 24),
-              // Camera scan only available on mobile (Android/iOS)
-              if (Platform.isAndroid || Platform.isIOS) ...[
-                OutlinedButton.icon(
-                  onPressed: _onScanMrz,
-                  icon: const Icon(Icons.camera_alt),
-                  label: const Text('Scan VIZ'),
+              // Capability-aware action buttons
+              FadeTransition(
+                opacity: _buttonsFade,
+                child: SlideTransition(
+                  position: _buttonsSlide,
+                  child: Builder(builder: (context) {
+                    final capAsync =
+                        ref.watch(chipReaderCapabilityProvider);
+                    final capability = capAsync.valueOrNull ??
+                        ChipReaderCapability.none;
+                    final hasChip = hasChipReader(capability);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Camera scan (mobile only)
+                        if (Platform.isAndroid || Platform.isIOS) ...[
+                          if (hasChip)
+                            OutlinedButton.icon(
+                              onPressed: _onScanMrz,
+                              icon: const Icon(Icons.camera_alt),
+                              label: Text(l10n.buttonScanViz),
+                            )
+                          else
+                            ElevatedButton.icon(
+                              onPressed: _onScanMrz,
+                              icon: const Icon(Icons.camera_alt),
+                              label: Text(l10n.buttonScanViz),
+                            ),
+                          const SizedBox(height: 12),
+                        ],
+                        // Chip reader button (only when available)
+                        if (hasChip)
+                          ElevatedButton.icon(
+                            onPressed: _onReadPassport,
+                            icon: Icon(
+                                _isDesktop ? Icons.usb : Icons.contactless),
+                            label: Text(_isDesktop
+                                ? l10n.buttonReadWithCardReader
+                                : l10n.buttonScanPassport),
+                          ),
+                        // OCR-only: view passport info directly
+                        if (!hasChip)
+                          OutlinedButton.icon(
+                            onPressed: _onViewOcrResult,
+                            icon: const Icon(Icons.badge),
+                            label:
+                                Text(l10n.mrzInputButtonViewOcrResult),
+                          ),
+                      ],
+                    );
+                  }),
                 ),
-                const SizedBox(height: 12),
-              ],
-              ElevatedButton.icon(
-                onPressed: _onReadPassport,
-                icon: Icon(_isDesktop ? Icons.usb : Icons.contactless),
-                label: Text(_isDesktop
-                    ? 'Read with Card Reader'
-                    : 'Scan Passport'),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  String? _validationErrorToString(MrzValidationError? error) {
+    if (error == null) return null;
+    final l10n = context.l10n;
+    return switch (error) {
+      MrzValidationError.docNumberRequired =>
+        l10n.validationDocNumberRequired,
+      MrzValidationError.docNumberMaxLength =>
+        l10n.validationDocNumberMaxLength,
+      MrzValidationError.docNumberInvalidChars =>
+        l10n.validationDocNumberInvalidChars,
+      MrzValidationError.dateRequired => l10n.validationDateRequired,
+      MrzValidationError.dateFormat => l10n.validationDateFormat,
+      MrzValidationError.dateDigitsOnly => l10n.validationDateDigitsOnly,
+      MrzValidationError.invalidMonth => l10n.validationInvalidMonth,
+      MrzValidationError.invalidDay => l10n.validationInvalidDay,
+    };
+  }
+}
+
+class _CapabilityBanner extends StatelessWidget {
+  final IconData icon;
+  final String message;
+  final Color color;
+
+  const _CapabilityBanner({
+    required this.icon,
+    required this.message,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: color,
+                  ),
+            ),
+          ),
+        ],
       ),
     );
   }

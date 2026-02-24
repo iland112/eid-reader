@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:eid_reader/features/passport_reader/domain/entities/mrz_field_comparison.dart';
@@ -6,6 +7,9 @@ import 'package:eid_reader/features/passport_display/presentation/widgets/viz_ve
 
 Widget _wrapInApp(Widget child) {
   return MaterialApp(
+    locale: const Locale('en'),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
       body: SingleChildScrollView(child: child),
     ),

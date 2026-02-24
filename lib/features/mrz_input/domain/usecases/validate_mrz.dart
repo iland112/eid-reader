@@ -1,43 +1,44 @@
 import '../entities/mrz_data.dart';
+import '../entities/validation_error.dart';
 
 /// Validates MRZ input data according to ICAO 9303.
 class ValidateMrz {
-  /// Returns null if valid, or an error message string if invalid.
-  String? validateDocumentNumber(String value) {
-    if (value.isEmpty) return 'Document number is required';
-    if (value.length > 9) return 'Maximum 9 characters';
+  /// Returns null if valid, or an error enum if invalid.
+  MrzValidationError? validateDocumentNumber(String value) {
+    if (value.isEmpty) return MrzValidationError.docNumberRequired;
+    if (value.length > 9) return MrzValidationError.docNumberMaxLength;
     if (!RegExp(r'^[A-Z0-9]+$').hasMatch(value.toUpperCase())) {
-      return 'Only letters and digits allowed';
+      return MrzValidationError.docNumberInvalidChars;
     }
     return null;
   }
 
   /// Validates date in YYMMDD format.
-  String? validateDate(String value, {String fieldName = 'Date'}) {
-    if (value.isEmpty) return '$fieldName is required';
-    if (value.length != 6) return 'Format: YYMMDD (6 digits)';
+  MrzValidationError? validateDate(String value) {
+    if (value.isEmpty) return MrzValidationError.dateRequired;
+    if (value.length != 6) return MrzValidationError.dateFormat;
     if (!RegExp(r'^[0-9]{6}$').hasMatch(value)) {
-      return 'Only digits allowed';
+      return MrzValidationError.dateDigitsOnly;
     }
 
     final month = int.parse(value.substring(2, 4));
     final day = int.parse(value.substring(4, 6));
 
-    if (month < 1 || month > 12) return 'Invalid month';
-    if (day < 1 || day > 31) return 'Invalid day';
+    if (month < 1 || month > 12) return MrzValidationError.invalidMonth;
+    if (day < 1 || day > 31) return MrzValidationError.invalidDay;
 
     return null;
   }
 
   /// Validates complete MRZ data. Returns null if valid.
-  String? validate(MrzData data) {
+  MrzValidationError? validate(MrzData data) {
     final docError = validateDocumentNumber(data.documentNumber);
-    if (docError != null) return 'Document number: $docError';
+    if (docError != null) return docError;
 
-    final dobError = validateDate(data.dateOfBirth, fieldName: 'Date of birth');
+    final dobError = validateDate(data.dateOfBirth);
     if (dobError != null) return dobError;
 
-    final doeError = validateDate(data.dateOfExpiry, fieldName: 'Date of expiry');
+    final doeError = validateDate(data.dateOfExpiry);
     if (doeError != null) return doeError;
 
     return null;

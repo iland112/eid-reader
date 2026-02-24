@@ -9,6 +9,7 @@ import '../../data/datasources/pa_service.dart';
 import '../../data/datasources/passport_datasource.dart';
 import '../../data/datasources/passport_datasource_factory.dart';
 import '../../domain/entities/passport_data.dart';
+import '../../domain/entities/passport_read_error.dart';
 import '../../domain/usecases/verify_viz.dart';
 
 final _log = Logger('PassportReaderNotifier');
@@ -31,6 +32,7 @@ class PassportReaderState {
   final ReadingStep step;
   final PassportData? data;
   final String? errorMessage;
+  final PassportReadError? error;
   final String? debugError;
 
   /// NFC step timings in ms (for diagnostics).
@@ -40,6 +42,7 @@ class PassportReaderState {
     this.step = ReadingStep.idle,
     this.data,
     this.errorMessage,
+    this.error,
     this.debugError,
     this.stepTimings = const {},
   });
@@ -48,6 +51,7 @@ class PassportReaderState {
     ReadingStep? step,
     PassportData? data,
     String? errorMessage,
+    PassportReadError? error,
     String? debugError,
     Map<String, int>? stepTimings,
   }) {
@@ -55,6 +59,7 @@ class PassportReaderState {
       step: step ?? this.step,
       data: data ?? this.data,
       errorMessage: errorMessage,
+      error: error,
       debugError: debugError,
       stepTimings: stepTimings ?? this.stepTimings,
     );
@@ -94,16 +99,14 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
         if (nfcAvailability == NFCAvailability.not_supported) {
           state = const PassportReaderState(
             step: ReadingStep.error,
-            errorMessage:
-                'NFC is not supported on this device.',
+            error: PassportReadError.nfcNotSupported,
           );
           return;
         }
         if (nfcAvailability == NFCAvailability.disabled) {
           state = const PassportReaderState(
             step: ReadingStep.error,
-            errorMessage:
-                'NFC is disabled. Please enable NFC in your device settings.',
+            error: PassportReadError.nfcDisabled,
           );
           return;
         }
@@ -170,7 +173,7 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
       _log.warning('readPassport error: $e');
       state = PassportReaderState(
         step: ReadingStep.error,
-        errorMessage: _getErrorMessage(e),
+        error: _classifyError(e),
         debugError: e.toString(),
       );
     }
@@ -180,31 +183,30 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
     state = const PassportReaderState();
   }
 
-  String _getErrorMessage(Object error) {
+  PassportReadError _classifyError(Object error) {
     final message = error.toString();
     if (message.contains('TagLost') ||
         message.contains('tag was lost') ||
         message.contains('CommunicationError')) {
-      return 'Connection lost. Keep your phone still against the passport and try again.';
+      return PassportReadError.tagLost;
     }
     if (message.contains('SecurityStatusNotSatisfied') ||
         message.contains('authentication')) {
-      return 'Authentication failed. Please check your passport details.';
+      return PassportReadError.authFailed;
     }
     if (message.contains('Polling tag timeout') ||
         message.contains('poll') ||
         message.contains('Poll')) {
-      return 'Passport not detected. Place your phone flat on the '
-          'passport data page and hold still.';
+      return PassportReadError.passportNotDetected;
     }
     if (message.contains('timeout') || message.contains('Timeout')) {
-      return 'Reading timed out. Please try again.';
+      return PassportReadError.timeout;
     }
     if (message.contains('NFC') || message.contains('nfc')) {
-      return 'Scan error. Please make sure NFC is enabled and try again.';
+      return PassportReadError.nfcError;
     }
     _log.warning('Unhandled error: $message');
-    return 'Could not read passport. Please reposition and try again.';
+    return PassportReadError.generic;
   }
 }
 
