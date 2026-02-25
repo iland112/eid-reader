@@ -253,5 +253,120 @@ void main() {
 
       expect(capturedHeaders!['Content-Type'], 'application/json');
     });
+
+    test('includes X-API-Key header when apiKey is provided', () async {
+      Map<String, String>? capturedHeaders;
+
+      final mockClient = MockClient((request) async {
+        capturedHeaders = request.headers;
+        return http.Response(
+          jsonEncode({
+            'success': true,
+            'data': {'status': 'VALID'},
+          }),
+          200,
+        );
+      });
+
+      final service = HttpPaService(
+        baseUrl: 'http://localhost:8080',
+        apiKey: 'icao_TEST1234_ABCDEF',
+        client: mockClient,
+      );
+
+      await service.verify(
+        sodBytes: testSodBytes,
+        dg1Bytes: testDg1Bytes,
+        dg2Bytes: testDg2Bytes,
+      );
+
+      expect(capturedHeaders!['X-API-Key'], 'icao_TEST1234_ABCDEF');
+    });
+
+    test('omits X-API-Key header when apiKey is null', () async {
+      Map<String, String>? capturedHeaders;
+
+      final mockClient = MockClient((request) async {
+        capturedHeaders = request.headers;
+        return http.Response(
+          jsonEncode({
+            'success': true,
+            'data': {'status': 'VALID'},
+          }),
+          200,
+        );
+      });
+
+      final service = HttpPaService(
+        baseUrl: 'http://localhost:8080',
+        client: mockClient,
+      );
+
+      await service.verify(
+        sodBytes: testSodBytes,
+        dg1Bytes: testDg1Bytes,
+        dg2Bytes: testDg2Bytes,
+      );
+
+      expect(capturedHeaders!.containsKey('X-API-Key'), false);
+    });
+
+    test('handles 429 rate limit response', () async {
+      final mockClient = MockClient((_) async {
+        return http.Response(
+          jsonEncode({
+            'error': 'Rate limit exceeded',
+            'message': 'Per-minute rate limit exceeded (60/min)',
+            'retryAfter': 45,
+          }),
+          429,
+          headers: {'retry-after': '45'},
+        );
+      });
+
+      final service = HttpPaService(
+        baseUrl: 'http://localhost:8080',
+        client: mockClient,
+      );
+
+      final result = await service.verify(
+        sodBytes: testSodBytes,
+        dg1Bytes: testDg1Bytes,
+        dg2Bytes: testDg2Bytes,
+      );
+
+      expect(result.isValid, false);
+      expect(result.status, 'ERROR');
+      expect(result.errorMessage, contains('Rate limit'));
+      expect(result.errorMessage, contains('45'));
+    });
+
+    test('handles 403 forbidden response', () async {
+      final mockClient = MockClient((_) async {
+        return http.Response(
+          jsonEncode({
+            'error': 'Forbidden',
+            'message': 'Insufficient permissions. Required: pa:verify',
+          }),
+          403,
+        );
+      });
+
+      final service = HttpPaService(
+        baseUrl: 'http://localhost:8080',
+        apiKey: 'icao_INVALID_KEY',
+        client: mockClient,
+      );
+
+      final result = await service.verify(
+        sodBytes: testSodBytes,
+        dg1Bytes: testDg1Bytes,
+        dg2Bytes: testDg2Bytes,
+      );
+
+      expect(result.isValid, false);
+      expect(result.status, 'ERROR');
+      expect(result.errorMessage, contains('permissions'));
+    });
   });
 }

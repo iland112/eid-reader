@@ -153,6 +153,13 @@ void main() {
         crlStatus: 'NOT_REVOKED',
         dscExpired: false,
         cscaExpired: false,
+        validAtSigningTime: true,
+        expirationStatus: 'VALID',
+        expirationMessage: '',
+        dscNonConformant: false,
+        pkdConformanceCode: null,
+        pkdConformanceText: null,
+        dscFingerprint: 'abc123',
         sodSignatureValid: true,
         hashAlgorithm: 'SHA-256',
         signatureAlgorithm: 'RSA',
@@ -161,7 +168,78 @@ void main() {
         invalidGroups: 0,
         errorMessage: null,
       );
-      expect(result.props.length, 16);
+      expect(result.props.length, 23);
+    });
+
+    test('fromJson parses v2.1.4+ extended fields', () {
+      final json = <String, dynamic>{
+        'success': true,
+        'data': {
+          'status': 'VALID',
+          'verificationId': 'test-uuid-ext',
+          'processingDurationMs': 180,
+          'certificateChainValidation': {
+            'valid': true,
+            'dscSubject': '/C=KR/CN=DSC 01',
+            'cscaSubject': '/C=KR/CN=CSCA KR',
+            'crlStatus': 'NOT_REVOKED',
+            'dscExpired': false,
+            'cscaExpired': false,
+            'validAtSigningTime': true,
+            'expirationStatus': 'VALID',
+            'expirationMessage': '',
+            'dscNonConformant': true,
+            'pkdConformanceCode': 'ERR:CSCA.CDP.14',
+            'pkdConformanceText': 'Non-conformant OID',
+          },
+          'sodSignatureValidation': {
+            'valid': true,
+            'hashAlgorithm': 'SHA-256',
+            'signatureAlgorithm': 'SHA256withRSA',
+          },
+          'dataGroupValidation': {
+            'totalGroups': 2,
+            'validGroups': 2,
+            'invalidGroups': 0,
+          },
+          'dscAutoRegistration': {
+            'registered': true,
+            'newlyRegistered': false,
+            'fingerprint': 'a1b2c3d4e5f6',
+            'countryCode': 'KR',
+          },
+        },
+      };
+
+      final result = PaVerificationResult.fromJson(json);
+      expect(result.validAtSigningTime, true);
+      expect(result.expirationStatus, 'VALID');
+      expect(result.expirationMessage, '');
+      expect(result.dscNonConformant, true);
+      expect(result.pkdConformanceCode, 'ERR:CSCA.CDP.14');
+      expect(result.pkdConformanceText, 'Non-conformant OID');
+      expect(result.dscFingerprint, 'a1b2c3d4e5f6');
+    });
+
+    test('fromJson handles legacy response without v2.1.4+ fields', () {
+      final json = <String, dynamic>{
+        'success': true,
+        'data': {
+          'status': 'VALID',
+          'certificateChainValidation': {
+            'valid': true,
+          },
+          'sodSignatureValidation': {
+            'valid': true,
+          },
+        },
+      };
+
+      final result = PaVerificationResult.fromJson(json);
+      expect(result.validAtSigningTime, isNull);
+      expect(result.expirationStatus, isNull);
+      expect(result.dscNonConformant, isNull);
+      expect(result.dscFingerprint, isNull);
     });
   });
 }

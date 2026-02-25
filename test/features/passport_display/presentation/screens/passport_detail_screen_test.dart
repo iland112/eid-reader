@@ -334,6 +334,60 @@ void main() {
     });
   });
 
+  group('PassportDetailScreen PA extended fields', () {
+    testWidgets('shows DSC Non-Conformant warning', (tester) async {
+      const paResult = PaVerificationResult(
+        status: 'VALID',
+        certificateChainValid: true,
+        sodSignatureValid: true,
+        totalGroups: 2,
+        validGroups: 2,
+        invalidGroups: 0,
+        dscNonConformant: true,
+        pkdConformanceCode: 'ERR:CSCA.CDP.14',
+      );
+      final dataWithPa = _testPassportData.copyWith(
+        passiveAuthValid: true,
+        paVerificationResult: paResult,
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(passportData: dataWithPa),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('DSC Conformance'), findsOneWidget);
+      expect(find.textContaining('Non-Conformant'), findsOneWidget);
+      expect(find.textContaining('ERR:CSCA.CDP.14'), findsOneWidget);
+    });
+
+    testWidgets('shows expiration status and valid-at-signing', (tester) async {
+      const paResult = PaVerificationResult(
+        status: 'VALID',
+        certificateChainValid: true,
+        sodSignatureValid: true,
+        totalGroups: 2,
+        validGroups: 2,
+        invalidGroups: 0,
+        expirationStatus: 'EXPIRED',
+        validAtSigningTime: true,
+      );
+      final dataWithPa = _testPassportData.copyWith(
+        passiveAuthValid: true,
+        paVerificationResult: paResult,
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(passportData: dataWithPa),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Expiration'), findsOneWidget);
+      expect(find.text('EXPIRED'), findsOneWidget);
+      expect(find.text('Valid at Signing'), findsOneWidget);
+    });
+  });
+
   group('PassportDetailScreen OCR-only mode', () {
     const ocrPassportData = PassportData(
       surname: 'DOE',

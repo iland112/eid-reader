@@ -12,10 +12,12 @@ final _log = Logger('HttpPaService');
 /// PA Service client that calls the REST API for Passive Authentication.
 class HttpPaService implements PaService {
   final String baseUrl;
+  final String? apiKey;
   final http.Client _client;
 
   HttpPaService({
     required this.baseUrl,
+    this.apiKey,
     http.Client? client,
   }) : _client = client ?? http.Client();
 
@@ -44,12 +46,19 @@ class HttpPaService implements PaService {
       body['documentNumber'] = documentNumber;
     }
 
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+    if (apiKey != null && apiKey!.isNotEmpty) {
+      headers['X-API-Key'] = apiKey!;
+    }
+
     try {
       _log.info('Sending PA verification request to $uri');
       final response = await _client
           .post(
             uri,
-            headers: {'Content-Type': 'application/json'},
+            headers: headers,
             body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 30));
@@ -65,6 +74,17 @@ class HttpPaService implements PaService {
           _log.warning('PA API returned error: $error');
           return PaVerificationResult.error(error);
         }
+      } else if (response.statusCode == 429) {
+        final retryAfter = response.headers['retry-after'] ?? '60';
+        _log.warning('PA API rate limited, retry after ${retryAfter}s');
+        return PaVerificationResult.error(
+          'Rate limit exceeded. Retry after ${retryAfter}s',
+        );
+      } else if (response.statusCode == 403) {
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        final message = json['message'] as String? ?? 'Access denied';
+        _log.warning('PA API forbidden: $message');
+        return PaVerificationResult.error(message);
       } else {
         _log.warning('PA API returned status ${response.statusCode}');
         return PaVerificationResult.error(

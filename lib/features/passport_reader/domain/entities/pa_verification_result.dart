@@ -24,6 +24,17 @@ class PaVerificationResult extends Equatable {
   final int? validGroups;
   final int? invalidGroups;
 
+  // Certificate chain extended fields (v2.1.4+)
+  final bool? validAtSigningTime;
+  final String? expirationStatus;
+  final String? expirationMessage;
+  final bool? dscNonConformant;
+  final String? pkdConformanceCode;
+  final String? pkdConformanceText;
+
+  // DSC auto-registration (v2.1.1+)
+  final String? dscFingerprint;
+
   // Error info
   final String? errorMessage;
 
@@ -37,6 +48,13 @@ class PaVerificationResult extends Equatable {
     this.crlStatus,
     this.dscExpired,
     this.cscaExpired,
+    this.validAtSigningTime,
+    this.expirationStatus,
+    this.expirationMessage,
+    this.dscNonConformant,
+    this.pkdConformanceCode,
+    this.pkdConformanceText,
+    this.dscFingerprint,
     this.sodSignatureValid,
     this.hashAlgorithm,
     this.signatureAlgorithm,
@@ -63,6 +81,8 @@ class PaVerificationResult extends Equatable {
         data['sodSignatureValidation'] as Map<String, dynamic>?;
     final dgValidation =
         data['dataGroupValidation'] as Map<String, dynamic>?;
+    final dscReg =
+        data['dscAutoRegistration'] as Map<String, dynamic>?;
 
     return PaVerificationResult(
       status: data['status'] as String? ?? 'UNKNOWN',
@@ -74,6 +94,13 @@ class PaVerificationResult extends Equatable {
       crlStatus: certChain?['crlStatus'] as String?,
       dscExpired: certChain?['dscExpired'] as bool?,
       cscaExpired: certChain?['cscaExpired'] as bool?,
+      validAtSigningTime: certChain?['validAtSigningTime'] as bool?,
+      expirationStatus: certChain?['expirationStatus'] as String?,
+      expirationMessage: certChain?['expirationMessage'] as String?,
+      dscNonConformant: certChain?['dscNonConformant'] as bool?,
+      pkdConformanceCode: certChain?['pkdConformanceCode'] as String?,
+      pkdConformanceText: certChain?['pkdConformanceText'] as String?,
+      dscFingerprint: dscReg?['fingerprint'] as String?,
       sodSignatureValid: sodSig?['valid'] as bool?,
       hashAlgorithm: sodSig?['hashAlgorithm'] as String?,
       signatureAlgorithm: sodSig?['signatureAlgorithm'] as String?,
@@ -102,6 +129,13 @@ class PaVerificationResult extends Equatable {
         crlStatus,
         dscExpired,
         cscaExpired,
+        validAtSigningTime,
+        expirationStatus,
+        expirationMessage,
+        dscNonConformant,
+        pkdConformanceCode,
+        pkdConformanceText,
+        dscFingerprint,
         sodSignatureValid,
         hashAlgorithm,
         signatureAlgorithm,

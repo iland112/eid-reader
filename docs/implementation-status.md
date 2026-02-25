@@ -222,9 +222,20 @@ This document tracks what has been implemented and what remains.
 - New files: `lib/app/device_capability_provider.dart`
 - 22 new tests (2 new test files + updates to 4 existing test files)
 
-### Test Suite (v0.2 – v0.13)
+### PA Service API Key + Rate Limit + Base URL (v0.14)
 
-- 476 tests across 37 test files (~370 unit + ~106 widget)
+- **Base URL 변경**: `192.168.1.70:8080` (WiFi) → `192.168.100.10:8080` (유선 LAN)
+- **API Key 지원**: 선택적 `X-API-Key` 헤더 (`paServiceApiKeyProvider`, v2.1.10+)
+- **Rate Limit 처리**: 429 응답 처리 (Retry-After 파싱)
+- **403 Forbidden 처리**: 권한 부족 에러 메시지 반환
+- **PaVerificationResult 확장**: 7개 새 필드 — `validAtSigningTime`, `expirationStatus`, `expirationMessage`, `dscNonConformant`, `pkdConformanceCode`, `pkdConformanceText`, `dscFingerprint`
+- **PassportDetailScreen PA 섹션 확장**: 만료 상태, 서명 시점 유효성, DSC 비준수 경고 표시
+- **로컬라이제이션**: 5개 새 키 × 2 언어 (en/ko)
+- 8 new tests (updates to 4 existing test files)
+
+### Test Suite (v0.2 – v0.14)
+
+- 484 tests across 37 test files (~378 unit + ~106 widget)
 - Manual mock pattern (no mockito codegen due to analyzer incompatibility)
 - Widget tests for all 4 screens (MrzInput, MrzCamera, NfcScan, PassportDetail)
 - See [testing.md](testing.md) for details

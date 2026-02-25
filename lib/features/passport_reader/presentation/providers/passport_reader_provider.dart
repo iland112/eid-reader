@@ -212,14 +212,23 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
 
 /// PA Service base URL provider. Override for custom server address.
 final paServiceBaseUrlProvider = Provider<String>((ref) {
-  return 'http://192.168.1.70:8080';
+  return 'http://192.168.100.10:8080';
+});
+
+/// PA Service API Key provider. Empty string = no API Key (Public access).
+final paServiceApiKeyProvider = Provider<String>((ref) {
+  return '';
 });
 
 /// PA Service provider. Returns null if base URL is empty.
 final paServiceProvider = Provider<PaService?>((ref) {
   final baseUrl = ref.watch(paServiceBaseUrlProvider);
   if (baseUrl.isEmpty) return null;
-  return HttpPaService(baseUrl: baseUrl);
+  final apiKey = ref.watch(paServiceApiKeyProvider);
+  return HttpPaService(
+    baseUrl: baseUrl,
+    apiKey: apiKey.isNotEmpty ? apiKey : null,
+  );
 });
 
 /// Face embedding service provider (for VIZ face comparison).

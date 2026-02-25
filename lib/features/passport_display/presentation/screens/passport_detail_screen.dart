@@ -199,6 +199,14 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen>
       if (pa.dscSubject != null) (context.l10n.labelDscSubject, pa.dscSubject!),
       if (pa.cscaSubject != null) (context.l10n.labelCscaSubject, pa.cscaSubject!),
       if (pa.crlStatus != null) (context.l10n.labelCrlStatus, pa.crlStatus!),
+      if (pa.expirationStatus != null)
+        (context.l10n.labelExpirationStatus, pa.expirationStatus!),
+      if (pa.validAtSigningTime != null)
+        (context.l10n.labelValidAtSigningTime,
+            pa.validAtSigningTime! ? context.l10n.labelValid : context.l10n.labelInvalid),
+      if (pa.dscNonConformant == true)
+        (context.l10n.labelDscNonConformant,
+            '${context.l10n.dscNonConformantWarning}${pa.pkdConformanceCode != null ? ' (${pa.pkdConformanceCode})' : ''}'),
       (
         context.l10n.labelSodSignature,
         pa.sodSignatureValid == true ? context.l10n.labelValid : context.l10n.labelInvalid,

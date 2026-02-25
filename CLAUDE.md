@@ -135,9 +135,11 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - PA verification via REST API: `POST /api/pa/verify` (see `docs/PA_API_GUIDE.md`)
 - `PaService` abstract interface + `HttpPaService` implementation (`http` package)
 - PA is optional: graceful degradation if server unavailable or SOD bytes empty
-- Base URL configurable via `paServiceBaseUrlProvider` (default: `http://192.168.1.70:8080` — Luckfox WiFi SC-WiFi)
+- Base URL configurable via `paServiceBaseUrlProvider` (default: `http://192.168.100.10:8080` — Luckfox 유선 LAN)
+- Optional API Key via `paServiceApiKeyProvider` + `X-API-Key` header (v2.1.10+)
+- Rate limit (429) and permission denied (403) error handling
+- `PaVerificationResult` entity: 8-step verification + v2.1.4+ fields (expirationStatus, validAtSigningTime, dscNonConformant, dscFingerprint)
 - `PassportReadResult` carries raw SOD/DG1/DG2 bytes from NFC read to PA service
-- `PaVerificationResult` entity: 8-step verification results (cert chain, SOD sig, DG hash)
 - `PassportData.copyWith()` combines NFC read data with PA results
 
 ### Error Handling
@@ -147,7 +149,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - Never expose raw exception messages to users.
 
 ### Testing
-- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **476 tests across 37 files.**
+- Unit + widget tests: `test/` directory, mirroring `lib/` structure. **484 tests across 37 files.**
 - **Manual mock pattern** (no mockito codegen due to analyzer 7.x incompatibility).
 - Use Riverpod `ProviderContainer` overrides for dependency injection in tests.
 - For `MethodChannel` testing, use `TestDefaultBinaryMessengerBinding`.

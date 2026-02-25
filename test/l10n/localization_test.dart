@@ -230,6 +230,13 @@ void main() {
       expect(l10n.badgeOcrOnly, 'OCR Scan Only');
       expect(l10n.badgeOcrOnlyDescription, contains('MRZ only'));
       expect(l10n.semanticOcrBadge, contains('OCR scan only'));
+
+      // PA extended fields (v2.1.4+)
+      expect(l10n.labelExpirationStatus, 'Expiration');
+      expect(l10n.labelValidAtSigningTime, 'Valid at Signing');
+      expect(l10n.labelDscNonConformant, 'DSC Conformance');
+      expect(l10n.dscNonConformantWarning, 'Non-Conformant');
+      expect(l10n.paRateLimitError, contains('Server busy'));
     });
 
     testWidgets('landingDescription resolves for ko locale', (tester) async {
@@ -254,6 +261,12 @@ void main() {
       expect(l10n.mrzInputButtonViewOcrResult, '여권 정보 보기');
       expect(l10n.passportDetailOcrTitle, '여권 정보 (OCR)');
       expect(l10n.badgeOcrOnly, 'OCR 스캔만');
+
+      // PA extended fields (v2.1.4+)
+      expect(l10n.labelExpirationStatus, '만료 상태');
+      expect(l10n.labelDscNonConformant, 'DSC 준수 상태');
+      expect(l10n.dscNonConformantWarning, '비준수');
+      expect(l10n.paRateLimitError, contains('서버가'));
     });
   });
 

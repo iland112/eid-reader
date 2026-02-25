@@ -2,7 +2,7 @@
 
 ## Overview
 
-- **Total tests**: 476
+- **Total tests**: 484
 - **Test files**: 37 (28 unit + 9 widget)
 - **Framework**: `flutter_test`
 - **Mock strategy**: Manual mocks (no mockito codegen)
@@ -273,7 +273,7 @@ Tests MRZ camera scanning state management with mock `TextRecognitionService` an
 | faceImageBytes default | Defaults to null |
 | Equality same values | Two identical instances are equal |
 
-#### `test/features/passport_reader/domain/entities/pa_verification_result_test.dart` (11 tests)
+#### `test/features/passport_reader/domain/entities/pa_verification_result_test.dart` (13 tests)
 
 | Test | Description |
 |---|---|
@@ -284,6 +284,8 @@ Tests MRZ camera scanning state management with mock `TextRecognitionService` an
 | fromJson INVALID | Parses INVALID response with cert chain failure |
 | fromJson error response | Handles `success: false` with error message |
 | fromJson missing nested | Handles missing nested objects gracefully |
+| fromJson v2.1.4+ fields | Parses extended fields (expirationStatus, validAtSigningTime, dscNonConformant, dscFingerprint) |
+| fromJson legacy compat | Handles legacy response without v2.1.4+ fields (all null) |
 | error factory | Creates ERROR result with error message |
 | Equality same | Two identical instances are equal |
 | Equality different | Different values are not equal |
@@ -373,7 +375,7 @@ Tests `VerifyViz` use case for VIZ-chip cross-verification and field-by-field co
 | Field comparison dates | YYMMDD↔YYYYMMDD date comparison |
 | Field comparison sex | Sex field comparison |
 
-#### `test/features/passport_reader/data/datasources/http_pa_service_test.dart` (8 tests)
+#### `test/features/passport_reader/data/datasources/http_pa_service_test.dart` (12 tests)
 
 | Test | Description |
 |---|---|
@@ -385,6 +387,10 @@ Tests `VerifyViz` use case for VIZ-chip cross-verification and field-by-field co
 | Network error | Handles ClientException with error result |
 | URL construction | Sends request to correct `/api/pa/verify` URL |
 | Content-Type | Sets `application/json` header |
+| API Key header | Includes `X-API-Key` header when apiKey provided |
+| No API Key | Omits `X-API-Key` header when apiKey is null |
+| 429 rate limit | Handles rate limit response with Retry-After |
+| 403 forbidden | Handles permission denied response with message |
 
 #### `test/features/passport_reader/presentation/providers/passport_reader_provider_test.dart` (18 tests)
 
@@ -461,7 +467,7 @@ animation, step indicator, and positioning guide.
 
 ### Widget: Passport Detail Screen
 
-#### `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` (22 tests)
+#### `test/features/passport_display/presentation/screens/passport_detail_screen_test.dart` (24 tests)
 
 Uses `Navigator.pushReplacement` to test dispose behavior. Updated for v0.7
 card-based layout with `PassportHeaderCard` + `InfoSectionCard` widgets.
@@ -484,6 +490,8 @@ card-based layout with `PassportHeaderCard` + `InfoSectionCard` widgets.
 | PA details section | Shows 'PA Verification Details' header with PA result |
 | PA cert chain details | Shows cert chain, SOD sig, DG hash, timing |
 | PA error message | Shows error message for failed PA verification |
+| DSC Non-Conformant | Shows Non-Conformant warning with PKD conformance code |
+| Expiration status | Shows expiration status and valid-at-signing fields |
 | OCR title | Renders 'Passport Info (OCR)' for OCR-only data |
 | OCR badge | Shows OCR badge with document_scanner icon |
 | OCR personal/document | Renders Personal Information and Document Details sections |
