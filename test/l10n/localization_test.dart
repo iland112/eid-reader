@@ -237,6 +237,12 @@ void main() {
       expect(l10n.labelDscNonConformant, 'DSC Conformance');
       expect(l10n.dscNonConformantWarning, 'Non-Conformant');
       expect(l10n.paRateLimitError, contains('Server busy'));
+
+      // CRL status descriptions
+      expect(l10n.crlNotRevoked, 'Not Revoked');
+      expect(l10n.crlRevoked, 'Revoked');
+      expect(l10n.crlExpired, 'CRL Expired');
+      expect(l10n.crlUnknown, 'Unknown');
     });
 
     testWidgets('landingDescription resolves for ko locale', (tester) async {
@@ -267,6 +273,12 @@ void main() {
       expect(l10n.labelDscNonConformant, 'DSC 준수 상태');
       expect(l10n.dscNonConformantWarning, '비준수');
       expect(l10n.paRateLimitError, contains('서버가'));
+
+      // CRL status descriptions
+      expect(l10n.crlNotRevoked, '폐지되지 않음');
+      expect(l10n.crlRevoked, '폐지됨');
+      expect(l10n.crlExpired, 'CRL 만료');
+      expect(l10n.crlUnknown, '알 수 없음');
     });
   });
 

@@ -198,7 +198,7 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen>
       ),
       if (pa.dscSubject != null) (context.l10n.labelDscSubject, pa.dscSubject!),
       if (pa.cscaSubject != null) (context.l10n.labelCscaSubject, pa.cscaSubject!),
-      if (pa.crlStatus != null) (context.l10n.labelCrlStatus, pa.crlStatus!),
+      if (pa.crlStatus != null) (context.l10n.labelCrlStatus, _crlDescription(context, pa.crlStatus!)),
       if (pa.expirationStatus != null)
         (context.l10n.labelExpirationStatus, pa.expirationStatus!),
       if (pa.validAtSigningTime != null)
@@ -224,6 +224,16 @@ class _PassportDetailScreenState extends ConsumerState<PassportDetailScreen>
       icon: Icons.verified_user,
       rows: rows,
     );
+  }
+
+  String _crlDescription(BuildContext context, String code) {
+    return switch (code) {
+      'NOT_REVOKED' => context.l10n.crlNotRevoked,
+      'REVOKED' => context.l10n.crlRevoked,
+      'CRL_EXPIRED' => context.l10n.crlExpired,
+      'UNKNOWN' => context.l10n.crlUnknown,
+      _ => code,
+    };
   }
 
   Widget _buildTimingPanel() {

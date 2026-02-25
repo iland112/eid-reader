@@ -304,7 +304,7 @@ void main() {
       expect(find.text('Valid'), findsNWidgets(2)); // cert chain + SOD sig
       expect(find.text('/C=KR/CN=DSC 01'), findsOneWidget);
       expect(find.text('/C=KR/CN=CSCA KR'), findsOneWidget);
-      expect(find.text('NOT_REVOKED'), findsOneWidget);
+      expect(find.text('Not Revoked'), findsOneWidget);
 
       // SOD signature
       expect(find.text('SHA256withRSA'), findsOneWidget);
