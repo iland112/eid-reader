@@ -135,8 +135,8 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - PA verification via REST API: `POST /api/pa/verify` (see `docs/PA_API_GUIDE.md`)
 - `PaService` abstract interface + `HttpPaService` implementation (`http` package)
 - PA is optional: graceful degradation if server unavailable or SOD bytes empty
-- Base URL configurable via `paServiceBaseUrlProvider` (default: `http://192.168.100.10:8080` — Luckfox 유선 LAN)
-- Optional API Key via `paServiceApiKeyProvider` + `X-API-Key` header (v2.1.10+)
+- Base URL configurable via `paServiceBaseUrlProvider` (default: `http://192.168.1.70:8080` — Luckfox WiFi); override with `--dart-define=PA_BASE_URL=...`
+- API Key via `paServiceApiKeyProvider` + `X-API-Key` header; inject with `--dart-define=PA_API_KEY=...`
 - Rate limit (429) and permission denied (403) error handling
 - `PaVerificationResult` entity: 8-step verification + v2.1.4+ fields (expirationStatus, validAtSigningTime, dscNonConformant, dscFingerprint)
 - `PassportReadResult` carries raw SOD/DG1/DG2 bytes from NFC read to PA service
@@ -209,7 +209,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `lib/features/passport_display/presentation/widgets/face_comparison_badge.dart` - Face match status badge
 - `lib/features/mrz_input/domain/usecases/mrz_ocr_corrector.dart` - Position-aware MRZ OCR character correction
 - `lib/core/utils/icao_codes.dart` - ICAO state code validation + single-char OCR correction
-- `lib/core/utils/nv21_utils.dart` - NV21 ROI cropping for MRZ region (rotation-aware, stride-aware)
+- `lib/core/utils/nv21_utils.dart` - NV21 ROI cropping, NV21→RGBA conversion, glare scoring
 - `lib/core/services/debug_log_service.dart` - Debug log file output + in-memory ring buffer for on-device overlay
 - `lib/features/passport_reader/domain/entities/mrz_field_comparison.dart` - Per-field OCR vs chip comparison entity
 - `android/app/src/main/kotlin/com/smartcoreinc/eid_reader/MainActivity.kt` - Native FLAG_SECURE handler
@@ -241,9 +241,12 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 ```bash
 # Development
 flutter pub get                    # Install dependencies
-flutter run                        # Run on connected device
-flutter build apk --debug         # Build debug APK
-flutter build apk --release       # Build release APK (R8 minified, ~89MB)
+flutter run --dart-define=PA_API_KEY=<key>   # Run with PA API key
+flutter build apk --debug --dart-define=PA_API_KEY=<key>   # Debug APK
+flutter build apk --release --dart-define=PA_API_KEY=<key>  # Release APK
+
+# Optional: override PA server address (default: http://192.168.1.70:8080)
+flutter run --dart-define=PA_API_KEY=<key> --dart-define=PA_BASE_URL=http://host:port
 
 # Code generation (after adding @riverpod annotations)
 dart run build_runner build --delete-conflicting-outputs

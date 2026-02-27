@@ -7,7 +7,6 @@ import 'package:eid_reader/features/passport_reader/domain/entities/image_qualit
 import 'package:eid_reader/features/passport_reader/domain/usecases/capture_viz_face.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'package:image/image.dart' as img;
 
 /// Mock face detection service for testing.
 class MockFaceDetectionService implements FaceDetectionService {
@@ -46,15 +45,16 @@ class MockImageQualityAnalyzer implements ImageQualityAnalyzer {
   }
 }
 
-/// Creates a test JPEG image with given dimensions.
-Uint8List _createTestJpeg({int width = 200, int height = 300}) {
-  final image = img.Image(width: width, height: height);
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
-      image.setPixelRgb(x, y, 128, 128, 128);
-    }
+/// Creates a test RGBA8888 buffer with given dimensions (uniform mid-gray).
+Uint8List _createTestRgba({int width = 200, int height = 300}) {
+  final rgba = Uint8List(width * height * 4);
+  for (var i = 0; i < rgba.length; i += 4) {
+    rgba[i] = 128; // R
+    rgba[i + 1] = 128; // G
+    rgba[i + 2] = 128; // B
+    rgba[i + 3] = 255; // A
   }
-  return Uint8List.fromList(img.encodeJpg(image));
+  return rgba;
 }
 
 void main() {
@@ -74,9 +74,9 @@ void main() {
   group('CaptureVizFace', () {
     test('returns null when no faces detected', () async {
       mockFaceDetection.facesToReturn = [];
-      final imageBytes = _createTestJpeg();
+      final rgbaBytes = _createTestRgba();
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(200, 300),
           rotation: InputImageRotation.rotation0deg,
@@ -86,7 +86,9 @@ void main() {
       );
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         inputImage: inputImage,
       );
 
@@ -97,9 +99,9 @@ void main() {
       mockFaceDetection.facesToReturn = [
         const Rect.fromLTWH(50, 60, 80, 100),
       ];
-      final imageBytes = _createTestJpeg();
+      final rgbaBytes = _createTestRgba();
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(200, 300),
           rotation: InputImageRotation.rotation0deg,
@@ -109,7 +111,9 @@ void main() {
       );
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         inputImage: inputImage,
       );
 
@@ -124,9 +128,9 @@ void main() {
         const Rect.fromLTWH(50, 50, 80, 100), // large face (area 8000)
         const Rect.fromLTWH(30, 30, 30, 30), // medium face (area 900)
       ];
-      final imageBytes = _createTestJpeg();
+      final rgbaBytes = _createTestRgba();
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(200, 300),
           rotation: InputImageRotation.rotation0deg,
@@ -136,7 +140,9 @@ void main() {
       );
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         inputImage: inputImage,
       );
 
@@ -156,9 +162,9 @@ void main() {
         overallScore: 0.9,
         issues: [],
       );
-      final imageBytes = _createTestJpeg();
+      final rgbaBytes = _createTestRgba();
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(200, 300),
           rotation: InputImageRotation.rotation0deg,
@@ -168,7 +174,9 @@ void main() {
       );
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         inputImage: inputImage,
       );
 
@@ -182,9 +190,9 @@ void main() {
       mockFaceDetection.facesToReturn = [
         const Rect.fromLTWH(0, 0, 50, 60),
       ];
-      final imageBytes = _createTestJpeg(width: 100, height: 100);
+      final rgbaBytes = _createTestRgba(width: 100, height: 100);
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(100, 100),
           rotation: InputImageRotation.rotation0deg,
@@ -194,7 +202,9 @@ void main() {
       );
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 100,
+        imageHeight: 100,
         inputImage: inputImage,
       );
 
@@ -206,9 +216,9 @@ void main() {
       mockFaceDetection.facesToReturn = [
         const Rect.fromLTWH(150, 240, 50, 60),
       ];
-      final imageBytes = _createTestJpeg(width: 200, height: 300);
+      final rgbaBytes = _createTestRgba(width: 200, height: 300);
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(200, 300),
           rotation: InputImageRotation.rotation0deg,
@@ -218,7 +228,9 @@ void main() {
       );
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         inputImage: inputImage,
       );
 
@@ -229,9 +241,9 @@ void main() {
       mockFaceDetection.facesToReturn = [
         const Rect.fromLTWH(50, 60, 80, 100),
       ];
-      final imageBytes = _createTestJpeg();
+      final rgbaBytes = _createTestRgba();
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(200, 300),
           rotation: InputImageRotation.rotation0deg,
@@ -241,7 +253,9 @@ void main() {
       );
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         inputImage: inputImage,
       );
 
@@ -251,9 +265,9 @@ void main() {
 
     test('returns null immediately when no faces detected', () async {
       mockFaceDetection.facesToReturn = [];
-      final imageBytes = _createTestJpeg();
+      final rgbaBytes = _createTestRgba();
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(200, 300),
           rotation: InputImageRotation.rotation0deg,
@@ -263,7 +277,9 @@ void main() {
       );
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         inputImage: inputImage,
       );
 
@@ -278,20 +294,12 @@ void main() {
       mockFaceDetection.facesToReturn = [
         const Rect.fromLTWH(10, 10, 20, 20),
       ];
-      final imageBytes = _createTestJpeg();
-      final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
-        metadata: InputImageMetadata(
-          size: const Size(200, 300),
-          rotation: InputImageRotation.rotation0deg,
-          format: InputImageFormat.nv21,
-          bytesPerRow: 200,
-        ),
-      );
+      final rgbaBytes = _createTestRgba();
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
-        inputImage: inputImage,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         previewFaceRect: const Rect.fromLTWH(50, 60, 80, 100),
         previewSize: const Size(200, 300),
       );
@@ -302,20 +310,12 @@ void main() {
 
     test('scales preview rect to full image coordinates', () async {
       // Preview is 100x150, full image is 200x300 → scale 2x
-      final imageBytes = _createTestJpeg(width: 200, height: 300);
-      final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
-        metadata: InputImageMetadata(
-          size: const Size(200, 300),
-          rotation: InputImageRotation.rotation0deg,
-          format: InputImageFormat.nv21,
-          bytesPerRow: 200,
-        ),
-      );
+      final rgbaBytes = _createTestRgba(width: 200, height: 300);
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
-        inputImage: inputImage,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         previewFaceRect: const Rect.fromLTWH(25, 30, 40, 50),
         previewSize: const Size(100, 150),
       );
@@ -328,9 +328,9 @@ void main() {
       mockFaceDetection.facesToReturn = [
         const Rect.fromLTWH(50, 60, 80, 100),
       ];
-      final imageBytes = _createTestJpeg(width: 200, height: 300);
+      final rgbaBytes = _createTestRgba(width: 200, height: 300);
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(200, 300),
           rotation: InputImageRotation.rotation0deg,
@@ -341,7 +341,9 @@ void main() {
 
       // Preview rect that will scale way out of bounds
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         inputImage: inputImage,
         previewFaceRect: const Rect.fromLTWH(500, 600, 80, 100),
         previewSize: const Size(100, 100),
@@ -355,9 +357,9 @@ void main() {
       mockFaceDetection.facesToReturn = [
         const Rect.fromLTWH(50, 60, 80, 100),
       ];
-      final imageBytes = _createTestJpeg();
+      final rgbaBytes = _createTestRgba();
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(200, 300),
           rotation: InputImageRotation.rotation0deg,
@@ -367,7 +369,9 @@ void main() {
       );
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         inputImage: inputImage,
         previewFaceRect: const Rect.fromLTWH(50, 60, 80, 100),
         // previewSize is null → should use ML Kit
@@ -387,9 +391,9 @@ void main() {
         const Rect.fromLTWH(10, 100, 40, 50),   // main photo (left)
         const Rect.fromLTWH(139, 100, 42, 52),  // ghost image (right, slightly larger)
       ];
-      final imageBytes = _createTestJpeg();
+      final rgbaBytes = _createTestRgba();
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(200, 300),
           rotation: InputImageRotation.rotation0deg,
@@ -399,7 +403,9 @@ void main() {
       );
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         inputImage: inputImage,
       );
 
@@ -416,9 +422,9 @@ void main() {
         const Rect.fromLTWH(120, 100, 60, 80),  // large right face (area 4800)
       ];
       // score: left = 500*1.5 = 750, right = 4800*1.0 = 4800 → right wins
-      final imageBytes = _createTestJpeg();
+      final rgbaBytes = _createTestRgba();
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(200, 300),
           rotation: InputImageRotation.rotation0deg,
@@ -428,7 +434,9 @@ void main() {
       );
 
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         inputImage: inputImage,
       );
 
@@ -439,9 +447,9 @@ void main() {
 
     test('returns null when fallback ML Kit finds no faces', () async {
       mockFaceDetection.facesToReturn = []; // No faces
-      final imageBytes = _createTestJpeg(width: 200, height: 300);
+      final rgbaBytes = _createTestRgba(width: 200, height: 300);
       final inputImage = InputImage.fromBytes(
-        bytes: imageBytes,
+        bytes: rgbaBytes,
         metadata: InputImageMetadata(
           size: const Size(200, 300),
           rotation: InputImageRotation.rotation0deg,
@@ -452,7 +460,9 @@ void main() {
 
       // Out of bounds → fallback → no faces
       final result = await captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: 200,
+        imageHeight: 300,
         inputImage: inputImage,
         previewFaceRect: const Rect.fromLTWH(500, 600, 80, 100),
         previewSize: const Size(100, 100),

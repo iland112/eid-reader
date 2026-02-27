@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -30,32 +31,31 @@ class CaptureVizFace {
   })  : _faceDetection = faceDetection,
         _qualityAnalyzer = qualityAnalyzer;
 
-  /// Captures VIZ face from a high-resolution still image.
+  /// Captures VIZ face from a pre-rotated RGBA image.
   ///
-  /// [imageBytes] - JPEG bytes from camera takePicture().
-  /// [inputImage] - InputImage for ML Kit face detection.
-  /// [rotationCompensation] - Degrees to rotate raw sensor image to match
-  ///   display orientation. Computed as
-  ///   `(sensorOrientation - deviceOrientationDegrees + 360) % 360`.
-  ///   Typical values: 90 (portrait), 0 (landscape left), 180 (landscape right).
+  /// [rgbaBytes] - RGBA8888 pixel bytes (already rotation-compensated).
+  /// [imageWidth] - Width of the RGBA image (post-rotation).
+  /// [imageHeight] - Height of the RGBA image (post-rotation).
+  /// [inputImage] - Optional InputImage for ML Kit face detection fallback.
+  ///   When null, ML Kit fallback is unavailable (returns null on fallback).
   /// [previewFaceRect] - Optional face rect detected from a preview frame,
   ///   in preview-frame coordinates. If provided, ML Kit detection is skipped.
   /// [previewSize] - Dimensions of the preview frame for coordinate scaling.
   ///
   /// Returns null if no face is detected.
   Future<VizCaptureResult?> execute({
-    required Uint8List imageBytes,
-    required InputImage inputImage,
+    required Uint8List rgbaBytes,
+    required int imageWidth,
+    required int imageHeight,
+    InputImage? inputImage,
     int rotationCompensation = 90,
     Rect? previewFaceRect,
     Size? previewSize,
   }) async {
     final sw = Stopwatch()..start();
 
-    // 1. Decode full image first (needed for both paths — scaling and crop).
-    //    dart:ui native decoder (Skia/Impeller) is 5-10x faster than pure-Dart.
-    //    instantiateImageCodec handles EXIF orientation automatically.
-    final fullImage = await _decodeImage(imageBytes);
+    // 1. Decode RGBA pixels into a ui.Image (~5ms vs ~100ms for JPEG).
+    final fullImage = await _decodeRgba(rgbaBytes, imageWidth, imageHeight);
     _log.info(
       'Image decoded: ${fullImage.width}x${fullImage.height} '
       '(${sw.elapsedMilliseconds}ms)',
@@ -86,6 +86,11 @@ class CaptureVizFace {
           largestFace.left < 0 ||
           largestFace.top < 0) {
         _log.warning('Scaled face rect out of bounds, falling back to ML Kit');
+        if (inputImage == null) {
+          _log.warning('No inputImage for ML Kit fallback');
+          fullImage.dispose();
+          return null;
+        }
         final faceRects = await _faceDetection.detectFaces(inputImage);
         if (faceRects.isEmpty) {
           fullImage.dispose();
@@ -95,7 +100,12 @@ class CaptureVizFace {
           faceRects, imageWidth: fullImage.width.toDouble());
       }
     } else {
-      // Standard path: ML Kit face detection on high-res image
+      // Standard path: ML Kit face detection
+      if (inputImage == null) {
+        _log.warning('No inputImage for ML Kit detection');
+        fullImage.dispose();
+        return null;
+      }
       final faceRects = await _faceDetection.detectFaces(inputImage);
       _log.info(
         'Face detection: ${faceRects.length} face(s) found '
@@ -114,33 +124,10 @@ class CaptureVizFace {
       '${largestFace.width.toInt()}x${largestFace.height.toInt()}',
     );
 
-    // 3. Handle rotation if face rect doesn't fit decoded image bounds.
-    //    dart:ui handles EXIF orientation, but if face rect still doesn't fit
-    //    (rare edge case), apply manual rotation compensation.
-    ui.Image orientedImage;
-    if (largestFace.right > fullImage.width ||
-        largestFace.bottom > fullImage.height) {
-      _log.info(
-        'Face rect out of bounds, '
-        'applying rotationCompensation=$rotationCompensation',
-      );
-      if (rotationCompensation != 0) {
-        orientedImage = await _rotateImage(fullImage, rotationCompensation);
-        fullImage.dispose();
-      } else {
-        orientedImage = fullImage;
-      }
-      _log.info(
-        'Rotated image: ${orientedImage.width}x${orientedImage.height} '
-        '(${sw.elapsedMilliseconds}ms)',
-      );
-    } else {
-      orientedImage = fullImage;
-    }
-
-    // 4. Crop face region with padding using Canvas API
-    final cropResult = await _cropFace(orientedImage, largestFace);
-    orientedImage.dispose();
+    // 3. Crop face region with padding using Canvas API
+    //    (No rotation step needed — RGBA is already rotation-compensated.)
+    final cropResult = await _cropFace(fullImage, largestFace);
+    fullImage.dispose();
     if (cropResult == null) {
       _log.warning('Crop returned null');
       return null;
@@ -169,47 +156,19 @@ class CaptureVizFace {
     );
   }
 
-  /// Decodes JPEG/PNG bytes using dart:ui's native decoder.
-  Future<ui.Image> _decodeImage(Uint8List bytes) async {
-    final codec = await ui.instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    codec.dispose();
-    return frame.image;
-  }
-
-  /// Rotates a ui.Image by the given angle (degrees) using Canvas.
-  Future<ui.Image> _rotateImage(ui.Image image, int angleDegrees) async {
-    final radians = angleDegrees * 3.141592653589793 / 180;
-
-    // Calculate rotated dimensions
-    final int newWidth;
-    final int newHeight;
-    if (angleDegrees == 90 || angleDegrees == 270) {
-      newWidth = image.height;
-      newHeight = image.width;
-    } else if (angleDegrees == 180) {
-      newWidth = image.width;
-      newHeight = image.height;
-    } else {
-      newWidth = image.width;
-      newHeight = image.height;
-    }
-
-    final recorder = ui.PictureRecorder();
-    final canvas = ui.Canvas(
-      recorder,
-      Rect.fromLTWH(0, 0, newWidth.toDouble(), newHeight.toDouble()),
+  /// Decodes raw RGBA8888 pixels into a ui.Image.
+  ///
+  /// ~5ms vs ~100ms for JPEG codec decode.
+  Future<ui.Image> _decodeRgba(Uint8List rgba, int width, int height) async {
+    final completer = Completer<ui.Image>();
+    ui.decodeImageFromPixels(
+      rgba,
+      width,
+      height,
+      ui.PixelFormat.rgba8888,
+      completer.complete,
     );
-
-    canvas.translate(newWidth / 2, newHeight / 2);
-    canvas.rotate(radians);
-    canvas.translate(-image.width / 2, -image.height / 2);
-    canvas.drawImage(image, Offset.zero, Paint());
-
-    final picture = recorder.endRecording();
-    final rotated = await picture.toImage(newWidth, newHeight);
-    picture.dispose();
-    return rotated;
+    return completer.future;
   }
 
   /// Selects the main passport photo face from detected faces.

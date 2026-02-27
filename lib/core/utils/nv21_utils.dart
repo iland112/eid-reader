@@ -212,3 +212,113 @@ int _evenFloor(int value, int max) {
   if (value > max) return max;
   return value & ~1; // Clear lowest bit → even
 }
+
+/// Computes a lightweight glare score from an NV21 buffer's Y plane.
+///
+/// Counts the ratio of pixels with luminance above [threshold] (default 240).
+/// NV21's Y plane occupies bytes `[0..W*H-1]`, which IS the luminance — no
+/// colour-space conversion needed, making this O(W*H) with zero allocation.
+///
+/// Returns 0.0 (no glare) to 1.0 (all pixels over-exposed).
+/// Returns 0.0 for empty or invalid buffers.
+///
+/// The default threshold (240) is consistent with
+/// `ImageQualityAnalyzer._calcGlareRatioFromGray()`.
+double computeNv21GlareScore(
+  Uint8List nv21Bytes,
+  int width,
+  int height, {
+  int threshold = 240,
+}) {
+  final totalPixels = width * height;
+  if (totalPixels <= 0 || nv21Bytes.length < totalPixels) {
+    return 0.0;
+  }
+
+  int overExposed = 0;
+  for (int i = 0; i < totalPixels; i++) {
+    if (nv21Bytes[i] > threshold) overExposed++;
+  }
+
+  return overExposed / totalPixels;
+}
+
+/// Converts an NV21 buffer to RGBA8888 bytes with optional rotation.
+///
+/// NV21 layout: `[Y plane: W*H bytes][VU interleaved: W*H/2 bytes]`
+/// RGBA layout: `[R,G,B,A, R,G,B,A, ...]` — 4 bytes per pixel.
+///
+/// Uses ITU-R BT.601 YUV→RGB conversion with fixed-point arithmetic
+/// for performance (~60ms for 1920×1080 on mid-range devices).
+///
+/// [rotationDegrees] applies clockwise rotation to the output image:
+///   - 0°: no rotation (output W×H)
+///   - 90°: rotate CW (output H×W)
+///   - 180°: rotate 180° (output W×H)
+///   - 270°: rotate CCW (output H×W)
+///
+/// Returns a record with the RGBA bytes and rotated dimensions.
+({Uint8List rgba, int width, int height}) nv21ToRgba({
+  required Uint8List nv21Bytes,
+  required int width,
+  required int height,
+  int rotationDegrees = 0,
+}) {
+  if (width <= 0 || height <= 0 || nv21Bytes.isEmpty) {
+    return (rgba: Uint8List(0), width: 0, height: 0);
+  }
+
+  final expectedSize = width * height + width * (height ~/ 2);
+  if (nv21Bytes.length < expectedSize) {
+    return (rgba: Uint8List(0), width: 0, height: 0);
+  }
+
+  final bool swapDims = rotationDegrees == 90 || rotationDegrees == 270;
+  final outW = swapDims ? height : width;
+  final outH = swapDims ? width : height;
+  final rgba = Uint8List(outW * outH * 4);
+  final uvOffset = width * height;
+
+  for (var y = 0; y < height; y++) {
+    final uvRow = (y >> 1) * width;
+    for (var x = 0; x < width; x++) {
+      // Read YUV values
+      final yVal = nv21Bytes[y * width + x];
+      final uvIdx = uvOffset + uvRow + (x & ~1);
+      final v = nv21Bytes[uvIdx] - 128;
+      final u = nv21Bytes[uvIdx + 1] - 128;
+
+      // ITU-R BT.601 fixed-point: multiply by 256 to avoid float
+      // R = Y + 1.370705*V ≈ Y + (351*V)>>8
+      // G = Y - 0.337633*U - 0.698001*V ≈ Y - (86*U + 179*V)>>8
+      // B = Y + 1.732446*U ≈ Y + (443*U)>>8
+      final r = (yVal + ((351 * v) >> 8)).clamp(0, 255);
+      final g = (yVal - ((86 * u + 179 * v) >> 8)).clamp(0, 255);
+      final b = (yVal + ((443 * u) >> 8)).clamp(0, 255);
+
+      // Compute output position based on rotation
+      int outIdx;
+      switch (rotationDegrees) {
+        case 90:
+          // (x,y) → output (height-1-y, x) in H×W image
+          outIdx = (x * outW + (height - 1 - y)) * 4;
+        case 180:
+          // (x,y) → output (width-1-x, height-1-y) in W×H image
+          outIdx = ((height - 1 - y) * outW + (width - 1 - x)) * 4;
+        case 270:
+          // (x,y) → output (y, width-1-x) in H×W image
+          outIdx = ((width - 1 - x) * outW + y) * 4;
+        default:
+          // 0° — no rotation
+          outIdx = (y * outW + x) * 4;
+      }
+
+      rgba[outIdx] = r;
+      rgba[outIdx + 1] = g;
+      rgba[outIdx + 2] = b;
+      rgba[outIdx + 3] = 255; // Alpha
+    }
+  }
+
+  return (rgba: rgba, width: outW, height: outH);
+}

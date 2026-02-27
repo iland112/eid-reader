@@ -109,6 +109,14 @@ All processing happens locally; PII never leaves the device.
    download, no model update mechanism, no external API calls
 5. **No PII logging**: similarity scores (numeric) are logged for debug; face bytes and embeddings are never logged
 
+**Multi-frame glare-aware caching:**
+Preview frames are cached in a ring buffer (up to 5 frames) with glare scores for best-frame
+selection. Security measures:
+- Each evicted frame is zero-filled (`nv21.fillRange(0, length, 0)`) before removal
+- All non-selected candidates are zero-filled when VIZ capture selects the best frame
+- On reset and dispose, all cached frames are zero-filled and cleared
+- NV21→RGBA converted frame is zero-filled after VIZ processing completes
+
 **Contrast enhancement retry:**
 When initial face detection fails, `CaptureVizFace` creates a contrast-enhanced copy of the image
 (1.5x linear stretch) as a temporary JPEG file in `Directory.systemTemp`. This temp file is
@@ -117,9 +125,21 @@ No biometric data persists to disk beyond this brief processing window.
 
 **Files:**
 - `lib/features/passport_reader/domain/usecases/verify_viz.dart` — embedding comparison + zeroing
-- `lib/features/passport_reader/domain/usecases/capture_viz_face.dart` — face extraction + full-page zeroing + contrast retry
+- `lib/features/passport_reader/domain/usecases/capture_viz_face.dart` — RGBA face extraction + zeroing
+- `lib/features/mrz_input/presentation/screens/mrz_camera_screen.dart` — glare-aware frame caching + NV21 zeroing
+- `lib/core/utils/nv21_utils.dart` — NV21→RGBA conversion, glare scoring
 - `lib/core/services/face_embedding_service.dart` — TFLite MobileFaceNet inference
 - `assets/models/mobilefacenet.tflite` — pre-trained model (~5MB, bundled)
+
+### Build-Time Secret Injection
+
+PA Service credentials are injected via `--dart-define` at build time, keeping secrets out of
+source code and Git history:
+
+- `PA_API_KEY`: `const String.fromEnvironment('PA_API_KEY')` — empty string if not provided (public access)
+- `PA_BASE_URL`: `const String.fromEnvironment('PA_BASE_URL', defaultValue: '...')` — server address override
+
+These compile-time constants are embedded in the AOT binary, not extractable as plain text strings.
 
 ## Not Yet Implemented
 
@@ -142,3 +162,5 @@ Security features are tested in:
 - `test/features/passport_reader/domain/usecases/capture_viz_face_test.dart` - Face extraction, quality analysis, contrast retry (9 tests)
 - `test/core/services/face_embedding_service_test.dart` - Cosine similarity math (8 tests)
 - `test/core/services/image_quality_analyzer_test.dart` - Blur/glare/saturation/contrast analysis (13 tests)
+- `test/core/utils/nv21_to_rgba_test.dart` - NV21→RGBA conversion, rotation, edge cases (13 tests)
+- `test/core/utils/nv21_glare_score_test.dart` - Y-plane glare scoring, threshold, boundary tests (12 tests)

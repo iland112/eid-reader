@@ -1,3 +1,6 @@
+# TFLite - suppress warning for optional GPU delegate
+-dontwarn org.tensorflow.lite.gpu.GpuDelegateFactory$Options
+
 # ML Kit text recognition - suppress warnings for optional script recognizers
 -dontwarn com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions$Builder
 -dontwarn com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions

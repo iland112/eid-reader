@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-02-24
+Last updated: 2026-02-27
 
 ## Overview
 
@@ -233,9 +233,25 @@ This document tracks what has been implemented and what remains.
 - **로컬라이제이션**: 5개 새 키 × 2 언어 (en/ko)
 - 8 new tests (updates to 4 existing test files)
 
-### Test Suite (v0.2 – v0.14)
+### VIZ Capture Optimization + Glare Defense + dart-define Config (v0.15)
 
-- 484 tests across 37 test files (~378 unit + ~106 widget)
+- **NV21→RGBA direct conversion**: `nv21ToRgba()` replaces `takePicture()` + JPEG decode pipeline
+  - Eliminates 469ms `takePicture()` + 115ms JPEG decode + 300ms stabilization delay
+  - ITU-R BT.601 fixed-point YUV→RGB with rotation support (0°/90°/180°/270°)
+- **CaptureVizFace RGBA input**: accepts pre-converted RGBA bytes via `decodeImageFromPixels()` (~5ms vs ~100ms JPEG decode)
+- **Multi-frame glare-aware frame selection**: ring buffer of 5 NV21 frames with glare scores
+  - `computeNv21GlareScore()`: Y-plane overexposure ratio (>240 threshold), consistent with `ImageQualityAnalyzer`
+  - Selects lowest-glare frame at VIZ capture time — improves capture under direct LED lighting
+  - All buffers zero-filled on eviction, selection, reset, and dispose (security)
+- **`--dart-define` configuration**: PA API key and base URL injected at build time
+  - `PA_API_KEY`: `String.fromEnvironment('PA_API_KEY')` — no secrets in source code
+  - `PA_BASE_URL`: `String.fromEnvironment('PA_BASE_URL', defaultValue: 'http://192.168.1.70:8080')`
+- **ProGuard fix**: `-dontwarn org.tensorflow.lite.gpu.GpuDelegateFactory$Options` for TFLite GPU delegate in release builds
+- 25 new tests (13 nv21ToRgba + 12 glare score)
+
+### Test Suite (v0.2 – v0.15)
+
+- 509 tests across 39 test files (~390 unit + ~119 widget)
 - Manual mock pattern (no mockito codegen due to analyzer incompatibility)
 - Widget tests for all 4 screens (MrzInput, MrzCamera, NfcScan, PassportDetail)
 - See [testing.md](testing.md) for details
@@ -249,8 +265,8 @@ This document tracks what has been implemented and what remains.
 - `<uses-feature android:name="android.hardware.camera" android:required="false" />`
 - Kotlin Gradle plugin updated to 2.2.0 (required by `wakelock_plus` / `package_info_plus`)
 - R8 minify + shrink resources enabled for release builds
-- ProGuard rules for ML Kit optional script recognizers (`proguard-rules.pro`)
-- Release APK build verified: `flutter build apk --release` → 89MB
+- ProGuard rules for ML Kit optional script recognizers + TFLite GPU delegate (`proguard-rules.pro`)
+- Release APK build verified: `flutter build apk --release` → ~175MB
 - Target device: Galaxy A36 5G (Android 16, API 36)
 
 ### Infrastructure (v0.2)

@@ -159,16 +159,19 @@ class MrzCameraNotifier extends StateNotifier<MrzCameraState> {
     }
   }
 
-  /// Captures VIZ face from a high-resolution still image.
+  /// Captures VIZ face from a pre-rotated RGBA image.
   ///
-  /// Called after MRZ detection when takePicture() captures a still frame.
-  /// [imageBytes] - JPEG bytes from camera takePicture().
-  /// [inputImage] - InputImage for ML Kit face detection.
-  /// [rotationCompensation] - Degrees to rotate raw sensor image to match
-  ///   display orientation (computed from sensor + device orientation).
+  /// Called after MRZ detection with NV21→RGBA converted preview frame.
+  /// [rgbaBytes] - RGBA8888 pixel bytes (already rotation-compensated).
+  /// [imageWidth] - Width of the RGBA image (post-rotation).
+  /// [imageHeight] - Height of the RGBA image (post-rotation).
+  /// [inputImage] - Optional InputImage for ML Kit face detection fallback.
+  /// [rotationCompensation] - Degrees for rotation compensation metadata.
   Future<void> captureViz({
-    required Uint8List imageBytes,
-    required InputImage inputImage,
+    required Uint8List rgbaBytes,
+    required int imageWidth,
+    required int imageHeight,
+    InputImage? inputImage,
     int rotationCompensation = 90,
     Rect? previewFaceRect,
     Size? previewSize,
@@ -179,8 +182,8 @@ class MrzCameraNotifier extends StateNotifier<MrzCameraState> {
     }
 
     _log.info(
-      'captureViz: starting, imageSize=${imageBytes.length} bytes, '
-      'rotation=$rotationCompensation',
+      'captureViz: starting, rgbaSize=${rgbaBytes.length} bytes, '
+      '${imageWidth}x$imageHeight, rotation=$rotationCompensation',
     );
 
     state = state.copyWith(
@@ -189,7 +192,9 @@ class MrzCameraNotifier extends StateNotifier<MrzCameraState> {
 
     try {
       final vizResult = await _captureVizFace.execute(
-        imageBytes: imageBytes,
+        rgbaBytes: rgbaBytes,
+        imageWidth: imageWidth,
+        imageHeight: imageHeight,
         inputImage: inputImage,
         rotationCompensation: rotationCompensation,
         previewFaceRect: previewFaceRect,
@@ -222,8 +227,8 @@ class MrzCameraNotifier extends StateNotifier<MrzCameraState> {
       );
     }
 
-    // Security: zero the full page image bytes after processing
-    imageBytes.fillRange(0, imageBytes.length, 0);
+    // Security: zero the RGBA pixel bytes after processing
+    rgbaBytes.fillRange(0, rgbaBytes.length, 0);
   }
 
   /// Process raw OCR text for MRZ detection (for testing without InputImage).

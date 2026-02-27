@@ -210,14 +210,19 @@ class PassportReaderNotifier extends StateNotifier<PassportReaderState> {
   }
 }
 
-/// PA Service base URL provider. Override for custom server address.
+/// PA Service base URL provider.
+/// Injected via `--dart-define=PA_BASE_URL=http://host:port`.
+/// Falls back to Luckfox WiFi address if not specified.
 final paServiceBaseUrlProvider = Provider<String>((ref) {
-  return 'http://192.168.100.10:8080';
+  return const String.fromEnvironment(
+    'PA_BASE_URL',
+    defaultValue: 'http://192.168.1.70:8080',
+  );
 });
 
 /// PA Service API Key provider. Empty string = no API Key (Public access).
 final paServiceApiKeyProvider = Provider<String>((ref) {
-  return '';
+  return const String.fromEnvironment('PA_API_KEY');
 });
 
 /// PA Service provider. Returns null if base URL is empty.
