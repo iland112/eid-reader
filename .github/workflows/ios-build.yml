@@ -18,6 +18,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Clone dmrtd fork
+        run: git clone https://github.com/iland112/dmrtd.git dmrtd-fork
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -61,10 +64,6 @@ jobs:
           plutil -insert 'com.apple.developer.nfc.readersession.iso7816.select-identifiers' \
             -json '["A0000002471001","A0000002472001"]' \
             ios/Runner/Info.plist
-
-      - name: Clone dmrtd fork
-        run: |
-          git clone https://github.com/iland112/dmrtd.git dmrtd-fork
 
       - name: Install dependencies
         run: flutter pub get
