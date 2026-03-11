@@ -29,7 +29,9 @@ jobs:
           cache: true
 
       - name: Create iOS project
-        run: flutter create . --platforms=ios --org=com.smartcoreinc
+        run: |
+          flutter create . --platforms=ios --org=com.smartcoreinc
+          rm -f test/widget_test.dart
 
       - name: Configure iOS project
         run: |
