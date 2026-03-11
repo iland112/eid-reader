@@ -38,7 +38,7 @@ jobs:
             ios/Runner.xcodeproj/project.pbxproj
 
           # Add NFC entitlement
-          cat > ios/Runner/Runner.entitlements << 'ENTITLEMENTS'
+          cat > ios/Runner/Runner.entitlements <<'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -49,21 +49,16 @@ jobs:
             </array>
           </dict>
           </plist>
-          ENTITLEMENTS
+          EOF
 
           # Add required Info.plist entries
-          plutil -insert NFCReaderUsageDescription \
-            -string "This app reads e-Passport chips via NFC" \
-            ios/Runner/Info.plist
-
-          plutil -insert NSCameraUsageDescription \
-            -string "This app uses the camera to scan MRZ codes" \
-            ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NFCReaderUsageDescription string 'This app reads e-Passport chips via NFC'" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'This app uses the camera to scan MRZ codes'" ios/Runner/Info.plist
 
           # Add ISO 7816 AID for e-Passport (ICAO 9303)
-          plutil -insert 'com.apple.developer.nfc.readersession.iso7816.select-identifiers' \
-            -json '["A0000002471001","A0000002472001"]' \
-            ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :com.apple.developer.nfc.readersession.iso7816.select-identifiers array" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :com.apple.developer.nfc.readersession.iso7816.select-identifiers:0 string A0000002471001" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :com.apple.developer.nfc.readersession.iso7816.select-identifiers:1 string A0000002472001" ios/Runner/Info.plist
 
       - name: Install dependencies
         run: flutter pub get
