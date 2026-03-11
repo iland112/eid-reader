@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-02-27
+Last updated: 2026-03-11
 
 ## Overview
 
@@ -249,9 +249,24 @@ This document tracks what has been implemented and what remains.
 - **ProGuard fix**: `-dontwarn org.tensorflow.lite.gpu.GpuDelegateFactory$Options` for TFLite GPU delegate in release builds
 - 25 new tests (13 nv21ToRgba + 12 glare score)
 
-### Test Suite (v0.2 – v0.15)
+### VIZ Quality Analysis + iOS CI/CD (v0.16)
 
-- 509 tests across 39 test files (~390 unit + ~119 widget)
+- **Pre-OCR frame quality analysis**: `computeNv21BlurScore()`, `computeNv21ExposureMetrics()`, `computeNv21CompositeScore()` — skip blurry/dark frames before expensive ML Kit OCR
+- **Composite frame scoring**: replaces glare-only selection; weights glare 40% + blur 40% + dark 20% for best VIZ capture
+- **NV21 2x downsampling**: `downsampleNv21x2()` reduces OCR processing time on large frames
+- **Real-time quality feedback UI**: blur/dark/glare warnings with icons (l10n EN/KO)
+- **VIZ face capture bug fix**: reverted ROI-based NV21→RGBA conversion to full-image (coordinate mismatch caused corrupted face thumbnails)
+- **iOS build via GitHub Actions**: `.github/workflows/ios-build.yml` (macOS runner)
+  - `flutter create . --platforms=ios` at CI time (iOS project not in repo)
+  - iOS 15.5 minimum target, NFC entitlement, camera permission, ISO 7816 AIDs
+  - `flutter build ios --no-codesign --release` (no Apple Developer account)
+  - All packages iOS-compatible except `dart_pcsc` (desktop only)
+- **GitHub repositories**: main repo pushed to https://github.com/iland112/eid-reader, dmrtd fork to https://github.com/iland112/dmrtd
+- 30 new tests (nv21 blur/exposure/composite/downsample/ROI)
+
+### Test Suite (v0.2 – v0.16)
+
+- 539 tests across 40 test files (~420 unit + ~119 widget)
 - Manual mock pattern (no mockito codegen due to analyzer incompatibility)
 - Widget tests for all 4 screens (MrzInput, MrzCamera, NfcScan, PassportDetail)
 - See [testing.md](testing.md) for details
@@ -292,6 +307,8 @@ This document tracks what has been implemented and what remains.
 | ~~Face Detection Improvement~~ | ~~Low~~ | DONE (v0.11) — minFaceSize 0.08, contrast enhancement retry |
 | ~~Performance Optimization~~ | ~~Medium~~ | DONE (v0.12) — OCR ROI crop, preview face reuse, ghost image defense, NFC maxRead 224 |
 | ~~Capability-aware UI~~ | ~~Medium~~ | DONE (v0.13) — Runtime NFC/PC·SC detection, OCR-only mode, adaptive Landing/MRZ/Detail screens |
+| ~~iOS Build~~ | ~~Medium~~ | DONE (v0.16) — GitHub Actions macOS runner, NFC entitlements, iOS 15.5+ |
+| Apple TestFlight Distribution | Low | Requires Apple Developer account + provisioning profiles |
 | VIZ threshold tuning | Low | Tune similarity/quality thresholds with real passport data |
 
 ## Commit History

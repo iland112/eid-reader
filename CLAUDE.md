@@ -3,7 +3,7 @@
 ## Project Purpose
 
 Multi-platform eID (electronic Identity Document) Reader built with Flutter.
-Primary goal: Read e-Passport (ICAO 9303) chip data via NFC on Android.
+Reads e-Passport (ICAO 9303) chip data via NFC on Android and iOS.
 Future expansion: Windows and Linux desktop support via USB smart card readers.
 
 This is a security-sensitive application handling personal identity data (PII).
@@ -72,7 +72,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 |---|---|---|
 | State Management | `flutter_riverpod` + `riverpod_annotation` | With code generation (`riverpod_generator`) |
 | Navigation | `go_router` | Declarative, URL-based routing |
-| Passport Reading | `dmrtd` (git dep: ZeroPass/dmrtd) | ICAO 9303, BAC+PACE, DG1/DG2/SOD |
+| Passport Reading | `dmrtd` (git dep: iland112/dmrtd) | ICAO 9303, BAC+PACE, DG1/DG2/SOD |
 | NFC | `flutter_nfc_kit` | Direct dependency (also transitive via dmrtd) |
 | HTTP Client | `http` | PA Service REST API communication |
 | Camera | `camera` | Camera preview and image stream |
@@ -214,6 +214,7 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - `lib/features/passport_reader/domain/entities/mrz_field_comparison.dart` - Per-field OCR vs chip comparison entity
 - `android/app/src/main/kotlin/com/smartcoreinc/eid_reader/MainActivity.kt` - Native FLAG_SECURE handler
 - `.devcontainer/Dockerfile` - Development environment
+- `.github/workflows/ios-build.yml` - iOS CI/CD build workflow (GitHub Actions macOS runner)
 - `pubspec.yaml` - Dependencies (note: dmrtd is a git dependency)
 
 ## Documentation
@@ -235,6 +236,23 @@ The `Passport` class from dmrtd works identically regardless of communication pr
 - **R8 minify/shrink**: enabled for release builds with `proguard-rules.pro`
 - **Debug signing**: uses debug keys (no Play Store deployment planned)
 - **Release APK**: `flutter build apk --release` → ~89MB
+
+## iOS Build Config
+
+- **Bundle ID**: `com.smartcoreinc.eidReader`
+- **Minimum Deployment Target**: 15.5 (required by `google_mlkit_face_detection`)
+- **Permissions**: Camera (NSCameraUsageDescription), NFC (NFCReaderUsageDescription)
+- **NFC Entitlement**: `com.apple.developer.nfc.readersession.formats` (TAG)
+- **ISO 7816 AIDs**: `A0000002471001`, `A0000002472001` (e-Passport ICAO 9303)
+- **CI/CD**: GitHub Actions macOS runner (`.github/workflows/ios-build.yml`)
+- **Code Signing**: Disabled (`--no-codesign`), no Apple Developer account
+- **iOS project**: Not in repo; generated at CI time via `flutter create . --platforms=ios`
+- **Unsupported package**: `dart_pcsc` (desktop only, not used on iOS)
+
+## GitHub Repositories
+
+- **Main**: https://github.com/iland112/eid-reader
+- **dmrtd fork**: https://github.com/iland112/dmrtd (maxRead=224)
 
 ## Commands
 
@@ -259,4 +277,8 @@ dart format lib/ test/             # Format code
 # ADB (from DevContainer)
 .devcontainer/connect-device.sh <device-ip>   # Connect Android device
 flutter devices                                # List connected devices
+
+# iOS (via GitHub Actions - requires macOS + Xcode locally)
+flutter build ios --no-codesign --release --dart-define=PA_API_KEY=<key>
+# CI builds triggered on push/PR to main: .github/workflows/ios-build.yml
 ```
