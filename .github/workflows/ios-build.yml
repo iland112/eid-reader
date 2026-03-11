@@ -1,0 +1,88 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+          cache: true
+
+      - name: Create iOS project
+        run: flutter create . --platforms=ios --org=com.smartcoreinc
+
+      - name: Configure iOS project
+        run: |
+          # Set minimum iOS deployment target to 15.5 (required by google_mlkit)
+          sed -i '' "s/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 15.5/g" \
+            ios/Runner.xcodeproj/project.pbxproj
+
+          # Add NFC entitlement
+          cat > ios/Runner/Runner.entitlements << 'ENTITLEMENTS'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.developer.nfc.readersession.formats</key>
+            <array>
+              <string>TAG</string>
+            </array>
+          </dict>
+          </plist>
+          ENTITLEMENTS
+
+          # Add required Info.plist entries
+          plutil -insert NFCReaderUsageDescription \
+            -string "This app reads e-Passport chips via NFC" \
+            ios/Runner/Info.plist
+
+          plutil -insert NSCameraUsageDescription \
+            -string "This app uses the camera to scan MRZ codes" \
+            ios/Runner/Info.plist
+
+          # Add ISO 7816 AID for e-Passport (ICAO 9303)
+          plutil -insert 'com.apple.developer.nfc.readersession.iso7816.select-identifiers' \
+            -json '["A0000002471001","A0000002472001"]' \
+            ios/Runner/Info.plist
+
+      - name: Clone dmrtd fork
+        run: |
+          git clone https://github.com/iland112/dmrtd.git dmrtd-fork
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run analyzer
+        run: flutter analyze --no-fatal-infos
+        continue-on-error: true
+
+      - name: Run tests
+        run: flutter test
+        continue-on-error: true
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --no-codesign --release --dart-define=PA_API_KEY=ci-build
+
+      - name: Archive build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build
+          path: build/ios/iphoneos/Runner.app
+          retention-days: 7

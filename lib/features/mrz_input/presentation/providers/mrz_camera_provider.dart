@@ -23,6 +23,41 @@ enum VizCaptureStatus {
   error,
 }
 
+/// Real-time frame quality feedback for the camera UI.
+class FrameQualityFeedback {
+  /// True if the current frame is too blurry for reliable OCR.
+  final bool isBlurry;
+
+  /// True if lighting is too low for reliable OCR.
+  final bool isTooDark;
+
+  /// True if there is significant glare.
+  final bool hasGlare;
+
+  /// Raw blur score for debug display.
+  final double blurScore;
+
+  /// Mean brightness (0-255) for debug display.
+  final double meanBrightness;
+
+  /// Glare ratio (0.0-1.0) for debug display.
+  final double glareRatio;
+
+  const FrameQualityFeedback({
+    this.isBlurry = false,
+    this.isTooDark = false,
+    this.hasGlare = false,
+    this.blurScore = 0,
+    this.meanBrightness = 128,
+    this.glareRatio = 0,
+  });
+
+  /// Whether any quality issue is detected.
+  bool get hasIssue => isBlurry || isTooDark || hasGlare;
+
+  static const good = FrameQualityFeedback();
+}
+
 /// State for MRZ camera scanning.
 class MrzCameraState {
   final bool isProcessing;
@@ -31,6 +66,7 @@ class MrzCameraState {
   final int debugFrameCount;
   final VizCaptureResult? vizCapture;
   final VizCaptureStatus vizCaptureStatus;
+  final FrameQualityFeedback qualityFeedback;
 
   const MrzCameraState({
     this.isProcessing = false,
@@ -39,6 +75,7 @@ class MrzCameraState {
     this.debugFrameCount = 0,
     this.vizCapture,
     this.vizCaptureStatus = VizCaptureStatus.idle,
+    this.qualityFeedback = const FrameQualityFeedback(),
   });
 
   MrzCameraState copyWith({
@@ -48,6 +85,7 @@ class MrzCameraState {
     int? debugFrameCount,
     VizCaptureResult? vizCapture,
     VizCaptureStatus? vizCaptureStatus,
+    FrameQualityFeedback? qualityFeedback,
   }) {
     return MrzCameraState(
       isProcessing: isProcessing ?? this.isProcessing,
@@ -56,6 +94,7 @@ class MrzCameraState {
       debugFrameCount: debugFrameCount ?? this.debugFrameCount,
       vizCapture: vizCapture ?? this.vizCapture,
       vizCaptureStatus: vizCaptureStatus ?? this.vizCaptureStatus,
+      qualityFeedback: qualityFeedback ?? this.qualityFeedback,
     );
   }
 }
@@ -275,6 +314,11 @@ class MrzCameraNotifier extends StateNotifier<MrzCameraState> {
       }
     }
     return null;
+  }
+
+  /// Updates real-time frame quality feedback for the UI.
+  void updateQualityFeedback(FrameQualityFeedback feedback) {
+    state = state.copyWith(qualityFeedback: feedback);
   }
 
   /// Marks VIZ capture as failed so the UI can proceed.

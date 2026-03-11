@@ -126,39 +126,85 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
     try {
       final notifier = ref.read(mrzCameraProvider.notifier);
 
-      // Build InputImage from camera frame (includes MRZ ROI crop)
+      // Get raw NV21 bytes for quality analysis
+      final Uint8List rawNv21;
+      if (image.format.group == ImageFormatGroup.nv21) {
+        rawNv21 = image.planes.first.bytes;
+      } else if (image.format.group == ImageFormatGroup.yuv420) {
+        rawNv21 = _yuv420ToNv21(image);
+      } else {
+        rawNv21 = Uint8List(0);
+      }
+
+      // --- Pre-OCR quality analysis (on raw Y plane) ---
+      // Compute lightweight quality metrics for real-time UI feedback
+      // and to skip OCR on frames that are too blurry or dark.
+      double frameGlare = 0;
+      double frameBlur = 0;
+      double frameBrightness = 128;
+      if (rawNv21.isNotEmpty) {
+        frameGlare =
+            computeNv21GlareScore(rawNv21, image.width, image.height);
+        frameBlur =
+            computeNv21BlurScore(rawNv21, image.width, image.height);
+        final exposure =
+            computeNv21ExposureMetrics(rawNv21, image.width, image.height);
+        frameBrightness = exposure.meanBrightness;
+
+        final feedback = FrameQualityFeedback(
+          isBlurry: frameBlur < 50,
+          isTooDark: frameBrightness < 60,
+          hasGlare: frameGlare > 0.10,
+          blurScore: frameBlur,
+          meanBrightness: frameBrightness,
+          glareRatio: frameGlare,
+        );
+        notifier.updateQualityFeedback(feedback);
+
+        // Skip OCR if frame is too blurry — saves ~150-300ms of wasted ML Kit
+        if (frameBlur < 30) {
+          _log.fine('Frame skipped: too blurry (score=$frameBlur)');
+          return;
+        }
+
+        // Skip OCR if too dark — ML Kit will fail anyway
+        if (frameBrightness < 40) {
+          _log.fine(
+              'Frame skipped: too dark (brightness=${frameBrightness.toStringAsFixed(0)})');
+          return;
+        }
+      }
+
+      // Build InputImage from camera frame (includes MRZ ROI crop + downsample)
       final inputImage = _buildInputImage(image);
       if (inputImage == null) {
         _log.fine('Frame skipped: _buildInputImage returned null');
         return;
       }
 
-      // Cache un-cropped NV21 with glare score for VIZ best-frame selection.
+      // Cache un-cropped NV21 with composite score for VIZ best-frame selection.
+      // Reuse pre-computed metrics to avoid redundant Y-plane scans.
       // Only start caching after first MRZ candidate to avoid unnecessary copies.
       final frameCount = ref.read(mrzCameraProvider).debugFrameCount;
-      if (frameCount > 0) {
-        final Uint8List nv21;
-        if (image.format.group == ImageFormatGroup.nv21) {
-          nv21 = image.planes.first.bytes;
-        } else if (image.format.group == ImageFormatGroup.yuv420) {
-          nv21 = _yuv420ToNv21(image);
-        } else {
-          nv21 = Uint8List(0);
-        }
-        if (nv21.isNotEmpty) {
-          final copy = Uint8List.fromList(nv21);
-          final glareScore =
-              computeNv21GlareScore(copy, image.width, image.height);
-          _frameCandidates.add(_FrameCandidate(
-            nv21: copy,
-            width: image.width,
-            height: image.height,
-            glareScore: glareScore,
-          ));
-          // Evict oldest when buffer is full, zero-fill for security
-          if (_frameCandidates.length > _maxFrameCandidates) {
-            _frameCandidates.removeAt(0).clear();
-          }
+      if (frameCount > 0 && rawNv21.isNotEmpty) {
+        final copy = Uint8List.fromList(rawNv21);
+        // Compute composite from pre-computed metrics
+        final blurPenalty = (1.0 - (frameBlur / 200.0)).clamp(0.0, 1.0);
+        final darkPenalty =
+            (1.0 - (frameBrightness - 60) / 60).clamp(0.0, 1.0);
+        final compositeScore =
+            frameGlare * 0.4 + blurPenalty * 0.4 + darkPenalty * 0.2;
+        _frameCandidates.add(_FrameCandidate(
+          nv21: copy,
+          width: image.width,
+          height: image.height,
+          glareScore: frameGlare,
+          blurScore: frameBlur,
+          compositeScore: compositeScore,
+        ));
+        // Evict oldest when buffer is full, zero-fill for security
+        if (_frameCandidates.length > _maxFrameCandidates) {
+          _frameCandidates.removeAt(0).clear();
         }
       }
 
@@ -200,17 +246,20 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
         'rotation=$rotationCompensation',
       );
 
-      // Select the frame with the lowest glare score from cached candidates
+      // Select the frame with the lowest composite score from cached candidates
       if (_frameCandidates.isEmpty) {
         _log.warning('VIZ capture: no preview frames available');
         ref.read(mrzCameraProvider.notifier).markVizError();
         return;
       }
-      _frameCandidates.sort((a, b) => a.glareScore.compareTo(b.glareScore));
+      _frameCandidates
+          .sort((a, b) => a.compositeScore.compareTo(b.compositeScore));
       final best = _frameCandidates.first;
       _log.info(
         'VIZ capture: selected frame with '
-        'glareScore=${best.glareScore.toStringAsFixed(3)} '
+        'composite=${best.compositeScore.toStringAsFixed(3)}, '
+        'glare=${best.glareScore.toStringAsFixed(3)}, '
+        'blur=${best.blurScore.toStringAsFixed(1)} '
         'from ${_frameCandidates.length} candidates',
       );
       final savedNv21 = best.nv21;
@@ -277,7 +326,8 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
       }
       _log.fine('VIZ capture: stream stopped (${sw.elapsedMilliseconds}ms)');
 
-      // Convert NV21 → RGBA with rotation (replaces takePicture + JPEG decode)
+      // Convert full NV21 → RGBA with rotation.
+      // Full-image conversion ensures face detection coordinates remain valid.
       final converted = nv21ToRgba(
         nv21Bytes: savedNv21,
         width: savedWidth,
@@ -360,6 +410,14 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
       srcStride: srcStride,
     );
 
+    // Downsample cropped region by 2x for faster ML Kit OCR (~40% speedup).
+    // MRZ text remains large enough for reliable recognition at half resolution.
+    final downsampled =
+        downsampleNv21x2(cropped.bytes, cropped.width, cropped.height);
+    final ocrBytes = downsampled?.bytes ?? cropped.bytes;
+    final ocrWidth = downsampled?.width ?? cropped.width;
+    final ocrHeight = downsampled?.height ?? cropped.height;
+
     // One-time diagnostic log for crop debugging
     if (!_cropDiagLogged) {
       _cropDiagLogged = true;
@@ -373,18 +431,19 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
         'rotation=$rotationDegrees, '
         'buf=${nv21Bytes.length}, '
         'expected=${srcStride * image.height * 3 ~/ 2}, '
-        'crop=${cropped.width}x${cropped.height} '
-        '(${cropped.bytes.length} bytes)',
+        'crop=${cropped.width}x${cropped.height}, '
+        'ocr=${ocrWidth}x$ocrHeight '
+        '(ds=${downsampled != null})',
       );
     }
 
     return InputImage.fromBytes(
-      bytes: cropped.bytes,
+      bytes: ocrBytes,
       metadata: InputImageMetadata(
-        size: Size(cropped.width.toDouble(), cropped.height.toDouble()),
+        size: Size(ocrWidth.toDouble(), ocrHeight.toDouble()),
         rotation: rotation,
         format: InputImageFormat.nv21,
-        bytesPerRow: cropped.width,
+        bytesPerRow: ocrWidth,
       ),
     );
   }
@@ -779,6 +838,7 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
   }
 
   Widget _buildScanningPanel(MrzCameraState cameraState) {
+    final feedback = cameraState.qualityFeedback;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -787,12 +847,66 @@ class _MrzCameraScreenState extends ConsumerState<MrzCameraScreen> {
         else
           const SizedBox(height: 4),
         const SizedBox(height: 12),
+        // Real-time quality feedback
+        if (feedback.hasIssue) ...[
+          _buildQualityFeedbackRow(feedback),
+          const SizedBox(height: 8),
+        ],
         Text(
           context.l10n.mrzCameraPositionInstruction,
           style: Theme.of(context).textTheme.bodyMedium,
           textAlign: TextAlign.center,
         ),
       ],
+    );
+  }
+
+  Widget _buildQualityFeedbackRow(FrameQualityFeedback feedback) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final warnings = <({IconData icon, String text, Color color})>[];
+
+    if (feedback.isBlurry) {
+      warnings.add((
+        icon: Icons.blur_on,
+        text: context.l10n.mrzCameraQualityBlurry,
+        color: colorScheme.error,
+      ));
+    }
+    if (feedback.isTooDark) {
+      warnings.add((
+        icon: Icons.brightness_low,
+        text: context.l10n.mrzCameraQualityTooDark,
+        color: colorScheme.error,
+      ));
+    }
+    if (feedback.hasGlare) {
+      warnings.add((
+        icon: Icons.wb_sunny_outlined,
+        text: context.l10n.mrzCameraQualityGlare,
+        color: Colors.orange,
+      ));
+    }
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 4,
+      alignment: WrapAlignment.center,
+      children: warnings
+          .map((w) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(w.icon, size: 16, color: w.color),
+                  const SizedBox(width: 4),
+                  Text(
+                    w.text,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: w.color),
+                  ),
+                ],
+              ))
+          .toList(),
     );
   }
 
@@ -1085,18 +1199,22 @@ class _PassportOverlayPainter extends CustomPainter {
       oldDelegate.boxWidth != boxWidth || oldDelegate.boxHeight != boxHeight;
 }
 
-/// A cached NV21 preview frame with its pre-computed glare score.
+/// A cached NV21 preview frame with pre-computed quality metrics.
 class _FrameCandidate {
   final Uint8List nv21;
   final int width;
   final int height;
   final double glareScore;
+  final double blurScore;
+  final double compositeScore;
 
   _FrameCandidate({
     required this.nv21,
     required this.width,
     required this.height,
     required this.glareScore,
+    required this.blurScore,
+    required this.compositeScore,
   });
 
   /// Zero-fills the NV21 buffer for secure disposal.

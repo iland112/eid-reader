@@ -20,6 +20,11 @@ android/app/.cxx/
 *.keystore
 *.jks
 
+# iOS
+ios/Flutter/ephemeral/
+ios/Pods/
+ios/.symlinks/
+
 # Linux
 linux/flutter/ephemeral/
 

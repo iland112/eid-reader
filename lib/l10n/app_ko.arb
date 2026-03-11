@@ -63,6 +63,9 @@
   "mrzCameraNoFaceDetected": "얼굴을 감지할 수 없습니다",
   "mrzCameraFaceDetectionFailed": "얼굴 감지 실패",
   "mrzCameraVizLabel": "VIZ",
+  "mrzCameraQualityBlurry": "흔들리지 않게 잡아주세요",
+  "mrzCameraQualityTooDark": "더 밝은 곳에서 촬영하세요",
+  "mrzCameraQualityGlare": "빛 반사를 줄여주세요",
 
   "vizScanResultTitle": "스캔 결과",
   "vizLabelName": "이름",

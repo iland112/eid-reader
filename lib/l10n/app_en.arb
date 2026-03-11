@@ -63,6 +63,9 @@
   "mrzCameraNoFaceDetected": "No face detected",
   "mrzCameraFaceDetectionFailed": "Face detection failed",
   "mrzCameraVizLabel": "VIZ",
+  "mrzCameraQualityBlurry": "Hold steady",
+  "mrzCameraQualityTooDark": "More light needed",
+  "mrzCameraQualityGlare": "Reduce glare",
 
   "vizScanResultTitle": "Scan Result",
   "vizLabelName": "Name",

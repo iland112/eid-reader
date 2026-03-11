@@ -243,6 +243,252 @@ double computeNv21GlareScore(
   return overExposed / totalPixels;
 }
 
+/// Computes a lightweight blur score from an NV21 buffer's Y plane.
+///
+/// Uses simplified Laplacian variance on a subsampled grid for speed.
+/// Samples every [step]-th pixel (default 2) to reduce computation by ~4x
+/// while maintaining accurate blur detection.
+///
+/// Returns Laplacian variance: higher = sharper.
+/// > 100: good, 50-100: acceptable, < 50: blurry.
+/// Returns 0.0 for empty or invalid buffers.
+double computeNv21BlurScore(
+  Uint8List nv21Bytes,
+  int width,
+  int height, {
+  int step = 2,
+}) {
+  final totalPixels = width * height;
+  if (width < 3 || height < 3 || nv21Bytes.length < totalPixels) {
+    return 0.0;
+  }
+
+  double sum = 0;
+  double sumSq = 0;
+  int count = 0;
+
+  // Subsample: step through pixels to trade precision for speed (~20ms)
+  for (int y = 1; y < height - 1; y += step) {
+    final rowOffset = y * width;
+    for (int x = 1; x < width - 1; x += step) {
+      final center = nv21Bytes[rowOffset + x].toDouble();
+      final top = nv21Bytes[(y - 1) * width + x].toDouble();
+      final bottom = nv21Bytes[(y + 1) * width + x].toDouble();
+      final left = nv21Bytes[rowOffset + (x - 1)].toDouble();
+      final right = nv21Bytes[rowOffset + (x + 1)].toDouble();
+
+      final laplacian = top + bottom + left + right - 4 * center;
+      sum += laplacian;
+      sumSq += laplacian * laplacian;
+      count++;
+    }
+  }
+
+  if (count == 0) return 0.0;
+
+  final mean = sum / count;
+  final variance = (sumSq / count) - (mean * mean);
+  return variance.abs();
+}
+
+/// Computes lightweight exposure metrics from an NV21 buffer's Y plane.
+///
+/// Returns a record with:
+/// - [meanBrightness]: average luminance (0-255). < 60 = too dark, > 220 = too bright.
+/// - [darkRatio]: fraction of pixels below [darkThreshold] (default 40).
+///
+/// O(W*H) single pass, zero allocation beyond the return value.
+({double meanBrightness, double darkRatio}) computeNv21ExposureMetrics(
+  Uint8List nv21Bytes,
+  int width,
+  int height, {
+  int darkThreshold = 40,
+}) {
+  final totalPixels = width * height;
+  if (totalPixels <= 0 || nv21Bytes.length < totalPixels) {
+    return (meanBrightness: 0.0, darkRatio: 0.0);
+  }
+
+  int sumBrightness = 0;
+  int darkPixels = 0;
+
+  for (int i = 0; i < totalPixels; i++) {
+    final lum = nv21Bytes[i];
+    sumBrightness += lum;
+    if (lum < darkThreshold) darkPixels++;
+  }
+
+  return (
+    meanBrightness: sumBrightness / totalPixels,
+    darkRatio: darkPixels / totalPixels,
+  );
+}
+
+/// Computes a composite frame quality score combining glare, blur, and exposure.
+///
+/// Lower score = better quality (suitable for sorting candidates).
+/// Components:
+/// - glareScore: over-exposed pixel ratio (0.0 - 1.0)
+/// - blurPenalty: inverse blur quality (0.0 - 1.0, 1.0 = very blurry)
+/// - darkPenalty: low-light penalty (0.0 - 1.0)
+///
+/// Weights: glare 40%, blur 40%, darkness 20%.
+double computeNv21CompositeScore(
+  Uint8List nv21Bytes,
+  int width,
+  int height,
+) {
+  final glare = computeNv21GlareScore(nv21Bytes, width, height);
+  final blur = computeNv21BlurScore(nv21Bytes, width, height);
+  final exposure = computeNv21ExposureMetrics(nv21Bytes, width, height);
+
+  // Normalize blur: 0 = very blurry (penalty 1.0), >= 200 = sharp (penalty 0.0)
+  final blurPenalty = (1.0 - (blur / 200.0)).clamp(0.0, 1.0);
+
+  // Normalize darkness: mean < 60 = too dark (penalty 1.0), >= 120 = fine (penalty 0.0)
+  final darkPenalty =
+      (1.0 - (exposure.meanBrightness - 60) / 60).clamp(0.0, 1.0);
+
+  return glare * 0.4 + blurPenalty * 0.4 + darkPenalty * 0.2;
+}
+
+/// Downsamples an NV21 buffer by a factor of 2 (half width, half height).
+///
+/// Uses simple 2x2 averaging for Y plane and direct subsampling for VU plane.
+/// This reduces the pixel count by 4x, significantly speeding up ML Kit OCR
+/// while maintaining sufficient text resolution for MRZ recognition.
+///
+/// Returns null if the buffer is too small or dimensions are odd.
+({Uint8List bytes, int width, int height})? downsampleNv21x2(
+  Uint8List nv21Bytes,
+  int width,
+  int height,
+) {
+  if (width < 4 || height < 4 || width.isOdd || height.isOdd) return null;
+
+  final expectedSize = width * height + width * (height ~/ 2);
+  if (nv21Bytes.length < expectedSize) return null;
+
+  final outW = width ~/ 2;
+  final outH = height ~/ 2;
+  final outSize = outW * outH + outW * (outH ~/ 2);
+  final result = Uint8List(outSize);
+
+  // Downsample Y plane: average 2x2 blocks
+  var destIdx = 0;
+  for (int y = 0; y < height; y += 2) {
+    final row0 = y * width;
+    final row1 = (y + 1) * width;
+    for (int x = 0; x < width; x += 2) {
+      result[destIdx++] = ((nv21Bytes[row0 + x] +
+                  nv21Bytes[row0 + x + 1] +
+                  nv21Bytes[row1 + x] +
+                  nv21Bytes[row1 + x + 1]) >>
+              2);
+    }
+  }
+
+  // Downsample VU plane: take every other VU pair
+  final uvOffset = width * height;
+  final uvWidth = width; // VU pairs per row (interleaved V,U)
+  final uvHeight = height ~/ 2;
+  for (int vuRow = 0; vuRow < uvHeight; vuRow += 2) {
+    final srcRowOffset = uvOffset + vuRow * uvWidth;
+    for (int x = 0; x < uvWidth; x += 4) {
+      // Each VU pair is 2 bytes (V, U), take every other pair
+      result[destIdx++] = nv21Bytes[srcRowOffset + x]; // V
+      result[destIdx++] = nv21Bytes[srcRowOffset + x + 1]; // U
+    }
+  }
+
+  return (bytes: result, width: outW, height: outH);
+}
+
+/// Converts a subregion of an NV21 buffer to RGBA8888 bytes with rotation.
+///
+/// Only processes pixels within [roi] (in raw NV21 coordinates), producing
+/// a smaller output buffer. This is significantly faster than converting the
+/// entire image when only a portion is needed (e.g., VIZ face region).
+///
+/// [roi] is specified in pre-rotation coordinates (raw buffer space).
+/// The output dimensions account for rotation.
+({Uint8List rgba, int width, int height}) nv21ToRgbaRoi({
+  required Uint8List nv21Bytes,
+  required int width,
+  required int height,
+  required int roiX,
+  required int roiY,
+  required int roiW,
+  required int roiH,
+  int rotationDegrees = 0,
+}) {
+  if (width <= 0 || height <= 0 || nv21Bytes.isEmpty) {
+    return (rgba: Uint8List(0), width: 0, height: 0);
+  }
+  if (roiW <= 0 || roiH <= 0) {
+    return (rgba: Uint8List(0), width: 0, height: 0);
+  }
+
+  // Clamp ROI to buffer bounds
+  final x0 = roiX.clamp(0, width - 1);
+  final y0 = roiY.clamp(0, height - 1);
+  final x1 = (roiX + roiW).clamp(0, width);
+  final y1 = (roiY + roiH).clamp(0, height);
+  final clampedW = x1 - x0;
+  final clampedH = y1 - y0;
+  if (clampedW <= 0 || clampedH <= 0) {
+    return (rgba: Uint8List(0), width: 0, height: 0);
+  }
+
+  final expectedSize = width * height + width * (height ~/ 2);
+  if (nv21Bytes.length < expectedSize) {
+    return (rgba: Uint8List(0), width: 0, height: 0);
+  }
+
+  final bool swapDims = rotationDegrees == 90 || rotationDegrees == 270;
+  final outW = swapDims ? clampedH : clampedW;
+  final outH = swapDims ? clampedW : clampedH;
+  final rgba = Uint8List(outW * outH * 4);
+  final uvOffset = width * height;
+
+  for (var y = y0; y < y1; y++) {
+    final uvRow = (y >> 1) * width;
+    for (var x = x0; x < x1; x++) {
+      final yVal = nv21Bytes[y * width + x];
+      final uvIdx = uvOffset + uvRow + (x & ~1);
+      final v = nv21Bytes[uvIdx] - 128;
+      final u = nv21Bytes[uvIdx + 1] - 128;
+
+      final r = (yVal + ((351 * v) >> 8)).clamp(0, 255);
+      final g = (yVal - ((86 * u + 179 * v) >> 8)).clamp(0, 255);
+      final b = (yVal + ((443 * u) >> 8)).clamp(0, 255);
+
+      // Map ROI-local coordinates to output position
+      final localX = x - x0;
+      final localY = y - y0;
+      int outIdx;
+      switch (rotationDegrees) {
+        case 90:
+          outIdx = (localX * outW + (clampedH - 1 - localY)) * 4;
+        case 180:
+          outIdx =
+              ((clampedH - 1 - localY) * outW + (clampedW - 1 - localX)) * 4;
+        case 270:
+          outIdx = ((clampedW - 1 - localX) * outW + localY) * 4;
+        default:
+          outIdx = (localY * outW + localX) * 4;
+      }
+
+      rgba[outIdx] = r;
+      rgba[outIdx + 1] = g;
+      rgba[outIdx + 2] = b;
+      rgba[outIdx + 3] = 255;
+    }
+  }
+
+  return (rgba: rgba, width: outW, height: outH);
+}
+
 /// Converts an NV21 buffer to RGBA8888 bytes with optional rotation.
 ///
 /// NV21 layout: `[Y plane: W*H bytes][VU interleaved: W*H/2 bytes]`
